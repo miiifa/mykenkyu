@@ -1,0 +1,2 @@
+module GodHelper
+end

@@ -1,3 +1,6 @@
 Rails.application.routes.draw do
-  # For details on the DSL available within this file, see https://guides.rubyonrails.org/routing.html
+  get 'god', to: 'god#index'
+  get 'god/index'
+  post 'god', to: 'god#index'
+  post 'god/index'
 end
