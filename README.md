@@ -1,24 +1,46 @@
-# README
+# mykenkyu
 
-This README would normally document whatever steps are necessary to get the
-application up and running.
+修士研究をWebアプリとして体験できるようにするためのRailsアプリです。
 
-Things you may want to cover:
+## 現在のゴール
 
-* Ruby version
+`shu-ron` 側で扱っているパズル生成・画像分割・描画処理を、ブラウザ上で触れる形にすることを目指します。
 
-* System dependencies
+まずはMVPとして、以下の操作ができる画面を用意しています。
 
-* Configuration
+- 画像をブラウザに読み込む
+- 画像を格子状のセルに分割する
+- 分割したセルをシャッフルしてパズルとして描画する
+- セルをクリックして入れ替える
+- 元の配置に復元する
 
-* Database creation
+## 研究コードとの対応
 
-* Database initialization
+`shu-ron` のProcessing実装では、複数枚の画像をセルに分割し、セル間の距離や対応関係を使って結果画像を生成しています。
 
-* How to run the test suite
+Web版では、まず以下を優先しています。
 
-* Services (job queues, cache servers, search engines, etc.)
+1. 研究の入口として、画像分割とパズル描画をブラウザで見られるようにする
+2. UI上でシャッフル・復元を体験できるようにする
+3. 将来的に、距離計算や最適化処理をバックエンドと接続する
 
-* Deployment instructions
+## 起動方法
 
-* ...
+```bash
+bundle install
+bin/rails server
+```
+
+ブラウザで以下を開きます。
+
+```text
+http://localhost:3000
+```
+
+## 今後やりたいこと
+
+- Processing版の描画ロジックをWeb向けに整理する
+- C++/Processing側の距離計算・対応付け結果をRailsから読み込めるようにする
+- 複数画像をアップロードできるようにする
+- 結果画像をダウンロードできるようにする
+- 研究内容を説明するページを追加する
