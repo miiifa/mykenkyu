@@ -85,27 +85,27 @@
   <main class="page">
     <section class="hero">
       <div class="hero-copy">
-        <span class="eyebrow">Sliding Block Puzzle × Images</span>
+        <span class="eyebrow">Sliding Block Puzzle × Assignment</span>
         <h1>絵が、パズルとして<br>近づいてくる。</h1>
         <p>卒業研究では2枚の画像をつなぎ、修士研究では3枚以上の画像を同じ駒集合で表現することを目指しました。このページは、その研究をブラウザで触れる形にしたWebデモです。</p>
-        <div class="quote">「完成された絵」をただ見るのではなく、駒を並べ替えることで別の絵を描く。</div>
+        <div class="quote">Step 3: 同じ位置で平均するだけでなく、どのセル同士を組ませるかを決めてから合成駒を作る。</div>
       </div>
       <div class="side">
         <div class="side-card">
-          <h2>テンプレ入り</h2>
-          <p>ページを開いた時点で、テスト用の3枚画像と合成駒が自動で表示されます。毎回アップロードする必要はありません。</p>
-          <div class="badges"><span class="badge">auto sample</span><span class="badge">3 images</span><span class="badge">merged pieces</span></div>
+          <h2>割り当て入り</h2>
+          <p>Image1を基準に、Image2をハンガリー法で割り当て、その重心に対してImage3も割り当てます。</p>
+          <div class="badges"><span class="badge">Hungarian</span><span class="badge">assignment</span><span class="badge">merged pieces</span></div>
         </div>
         <div class="side-card">
-          <h2>これから再現するもの</h2>
-          <p>距離計算、ハンガリー法による初期解、UIサーチ、ブロックモデル、スライドパズル解法を段階的に復元していきます。</p>
-          <div class="badges"><span class="badge">UI Search</span><span class="badge">Block Model</span><span class="badge">Uegen's Greedy</span></div>
+          <h2>まだ簡易版</h2>
+          <p>UIサーチやブロックモデルは次段階。まずは研究本体の入口である「割り当て付き合成駒」まで復元しています。</p>
+          <div class="badges"><span class="badge">Step 3</span><span class="badge">centroid</span><span class="badge">reconstruction</span></div>
         </div>
       </div>
     </section>
 
     <section class="panel" id="demo">
-      <h2>3枚画像の合成駒デモ</h2>
+      <h2>3枚画像の割り当て合成駒デモ</h2>
       <p>テンプレ画像は自動生成済みです。自分の画像で試したい場合だけ、下の入力から差し替えてください。</p>
 
       <div class="controls">
@@ -116,7 +116,7 @@
 
       <div class="toolbar">
         <button class="accent" id="templateButton">テンプレ画像に戻す</button>
-        <button class="green" id="buildButton">合成駒を作る</button>
+        <button class="green" id="buildButton">割り当てを再計算</button>
         <button class="secondary" id="shuffleButton">スライドパズル化</button>
         <button class="secondary" id="solveButton">元の配置に戻す</button>
         <label>分割数
@@ -126,7 +126,7 @@
             <option value="10" selected>10 × 10</option>
             <option value="12">12 × 12</option>
             <option value="15">15 × 15</option>
-            <option value="30">30 × 30（重い）</option>
+            <option value="30">30 × 30（簡易greedy）</option>
           </select>
         </label>
       </div>
@@ -140,14 +140,14 @@
           <div class="stats">
             <div class="stat"><b id="gridStat">10×10</b><span>セル分割</span></div>
             <div class="stat"><b id="pieceStat">100</b><span>合成駒数</span></div>
-            <div class="stat"><b id="blankStat">なし</b><span>空白マス</span></div>
+            <div class="stat"><b id="methodStat">-</b><span>割り当て方式</span></div>
             <div class="stat"><b id="moveStat">0</b><span>操作回数</span></div>
           </div>
           <div class="note" id="message">テンプレ画像を読み込み中です。</div>
-          <h3>今できること</h3>
-          <p>3枚画像の読み込み、セル分割、同位置平均による合成駒生成、表示切替、空白マスを使った行・列スライドができます。</p>
-          <h3>次に入れるもの</h3>
-          <p>距離計算、ハンガリー法による初期解、UIサーチ風の改善アニメーション、ブロックモデルによるムラ補正。</p>
+          <h3>表示タブ</h3>
+          <p>「割当合成駒」はセル割り当て後の合成駒、「同位置合成駒」は従来の同じ位置平均です。再構築1/2/3では、それぞれの画像側の対応位置に合成駒を配置します。</p>
+          <h3>実装メモ</h3>
+          <p>15×15まではハンガリー法、30×30はブラウザを固めないため簡易greedyで割り当てます。</p>
         </div>
       </div>
     </section>
@@ -166,6 +166,8 @@
 
   <script>
     const SIZE = 600;
+    const FEATURE_SIZE = 4;
+    const HUNGARIAN_LIMIT = 225;
     const canvas = document.getElementById('mainCanvas');
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     const fileInputs = [0, 1, 2].map((i) => document.getElementById(`file${i}`));
@@ -174,16 +176,19 @@
     const message = document.getElementById('message');
     const gridStat = document.getElementById('gridStat');
     const pieceStat = document.getElementById('pieceStat');
-    const blankStat = document.getElementById('blankStat');
+    const methodStat = document.getElementById('methodStat');
     const moveStat = document.getElementById('moveStat');
 
     let images = [null, null, null];
     let sourceData = [];
-    let mergedData = null;
+    let cells = [];
+    let views = {};
+    let assignments = { p12: [], p13: [], invP12: [], invP13: [] };
     let pieces = [];
-    let currentView = 'merged';
+    let currentView = 'assigned';
     let blankIndex = null;
     let moves = 0;
+    let assignmentMethod = '-';
 
     function setMessage(text) { message.textContent = text; }
 
@@ -197,101 +202,235 @@
 
       if (kind === 0) {
         const bg = g.createLinearGradient(0, 0, SIZE, SIZE);
-        bg.addColorStop(0, '#2b234a');
-        bg.addColorStop(.5, '#f6c35b');
-        bg.addColorStop(1, '#f5efe6');
-        g.fillStyle = bg;
-        g.fillRect(0, 0, SIZE, SIZE);
-        g.fillStyle = 'rgba(20,18,32,.58)';
-        g.beginPath(); g.ellipse(300, 330, 130, 190, 0, 0, Math.PI * 2); g.fill();
-        g.fillStyle = 'rgba(255,227,160,.9)';
-        g.beginPath(); g.ellipse(300, 250, 74, 94, 0, 0, Math.PI * 2); g.fill();
+        bg.addColorStop(0, '#2b234a'); bg.addColorStop(.5, '#f6c35b'); bg.addColorStop(1, '#f5efe6');
+        g.fillStyle = bg; g.fillRect(0, 0, SIZE, SIZE);
+        g.fillStyle = 'rgba(20,18,32,.58)'; g.beginPath(); g.ellipse(300, 330, 130, 190, 0, 0, Math.PI * 2); g.fill();
+        g.fillStyle = 'rgba(255,227,160,.9)'; g.beginPath(); g.ellipse(300, 250, 74, 94, 0, 0, Math.PI * 2); g.fill();
         g.fillStyle = '#30253b'; g.fillRect(232, 214, 136, 22);
         g.fillStyle = 'rgba(255,255,255,.18)';
         for (let i = 0; i < 18; i++) { g.beginPath(); g.arc(70 + i * 30, 100 + Math.sin(i) * 30, 18, 0, Math.PI * 2); g.fill(); }
       }
-
       if (kind === 1) {
         const bg = g.createLinearGradient(0, 0, SIZE, SIZE);
-        bg.addColorStop(0, '#071b4b');
-        bg.addColorStop(.55, '#1847a0');
-        bg.addColorStop(1, '#e8c15d');
-        g.fillStyle = bg;
-        g.fillRect(0, 0, SIZE, SIZE);
+        bg.addColorStop(0, '#071b4b'); bg.addColorStop(.55, '#1847a0'); bg.addColorStop(1, '#e8c15d');
+        g.fillStyle = bg; g.fillRect(0, 0, SIZE, SIZE);
         for (let i = 0; i < 70; i++) {
-          const x = (i * 97) % SIZE;
-          const y = 30 + ((i * 53) % 360);
+          const x = (i * 97) % SIZE, y = 30 + ((i * 53) % 360);
           g.fillStyle = `rgba(255,255,210,${0.35 + (i % 7) * 0.08})`;
           g.beginPath(); g.arc(x, y, 2 + (i % 4), 0, Math.PI * 2); g.fill();
         }
         for (let r = 0; r < 7; r++) {
-          g.strokeStyle = `rgba(255,225,110,${.55 - r * .06})`;
-          g.lineWidth = 10 - r;
+          g.strokeStyle = `rgba(255,225,110,${.55 - r * .06})`; g.lineWidth = 10 - r;
           g.beginPath(); g.arc(430, 130, 25 + r * 12, 0, Math.PI * 1.7); g.stroke();
         }
-        g.fillStyle = '#101a2f';
-        g.beginPath(); g.moveTo(0, 510);
+        g.fillStyle = '#101a2f'; g.beginPath(); g.moveTo(0, 510);
         for (let x = 0; x <= SIZE; x += 40) g.lineTo(x, 450 + Math.sin(x / 55) * 35);
         g.lineTo(SIZE, SIZE); g.lineTo(0, SIZE); g.fill();
       }
-
       if (kind === 2) {
         const bg = g.createLinearGradient(0, 0, SIZE, SIZE);
-        bg.addColorStop(0, '#dff8ff');
-        bg.addColorStop(.48, '#2f8fc7');
-        bg.addColorStop(1, '#10234f');
-        g.fillStyle = bg;
-        g.fillRect(0, 0, SIZE, SIZE);
+        bg.addColorStop(0, '#dff8ff'); bg.addColorStop(.48, '#2f8fc7'); bg.addColorStop(1, '#10234f');
+        g.fillStyle = bg; g.fillRect(0, 0, SIZE, SIZE);
         for (let wave = 0; wave < 7; wave++) {
           g.fillStyle = wave % 2 ? '#1f6b9f' : '#f7f3e8';
-          g.beginPath();
-          const y = 160 + wave * 52;
-          g.moveTo(0, y);
+          g.beginPath(); const y = 160 + wave * 52; g.moveTo(0, y);
           for (let x = 0; x <= SIZE; x += 24) g.quadraticCurveTo(x + 12, y - 40, x + 24, y + Math.sin(x / 30 + wave) * 22);
           g.lineTo(SIZE, y + 70); g.lineTo(0, y + 70); g.fill();
         }
-        g.fillStyle = 'rgba(11,42,85,.78)';
-        g.beginPath(); g.moveTo(360, 460); g.lineTo(430, 280); g.lineTo(510, 460); g.fill();
-        g.fillStyle = 'rgba(255,255,255,.85)';
-        g.beginPath(); g.moveTo(430, 280); g.lineTo(460, 350); g.lineTo(404, 350); g.fill();
+        g.fillStyle = 'rgba(11,42,85,.78)'; g.beginPath(); g.moveTo(360, 460); g.lineTo(430, 280); g.lineTo(510, 460); g.fill();
+        g.fillStyle = 'rgba(255,255,255,.85)'; g.beginPath(); g.moveTo(430, 280); g.lineTo(460, 350); g.lineTo(404, 350); g.fill();
       }
-
-      return new Promise((resolve) => {
-        const img = new Image();
-        img.onload = () => resolve(img);
-        img.src = c.toDataURL('image/png');
-      });
+      return new Promise((resolve) => { const img = new Image(); img.onload = () => resolve(img); img.src = c.toDataURL('image/png'); });
     }
 
     async function loadTemplates() {
       images = await Promise.all([0, 1, 2].map(templateImage));
       fileInputs.forEach((input) => { input.value = ''; });
-      build('テンプレ画像3枚を読み込み、合成駒を自動生成しました。');
+      build('テンプレ画像3枚を読み込み、割り当て付き合成駒を自動生成しました。');
     }
 
     function imageToData(img) {
-      const off = document.createElement('canvas');
-      off.width = SIZE;
-      off.height = SIZE;
+      const off = document.createElement('canvas'); off.width = SIZE; off.height = SIZE;
       const g = off.getContext('2d', { willReadFrequently: true });
-      g.fillStyle = 'white';
-      g.fillRect(0, 0, SIZE, SIZE);
+      g.fillStyle = 'white'; g.fillRect(0, 0, SIZE, SIZE);
       const scale = Math.max(SIZE / img.width, SIZE / img.height);
-      const w = img.width * scale;
-      const h = img.height * scale;
+      const w = img.width * scale, h = img.height * scale;
       g.drawImage(img, (SIZE - w) / 2, (SIZE - h) / 2, w, h);
       return g.getImageData(0, 0, SIZE, SIZE);
     }
 
-    function averageData(items) {
-      const out = ctx.createImageData(SIZE, SIZE);
-      for (let i = 0; i < out.data.length; i += 4) {
-        out.data[i] = Math.round((items[0].data[i] + items[1].data[i] + items[2].data[i]) / 3);
-        out.data[i + 1] = Math.round((items[0].data[i + 1] + items[1].data[i + 1] + items[2].data[i + 1]) / 3);
-        out.data[i + 2] = Math.round((items[0].data[i + 2] + items[1].data[i + 2] + items[2].data[i + 2]) / 3);
-        out.data[i + 3] = 255;
+    function gray(r, g, b) { return 0.299 * r + 0.587 * g + 0.114 * b; }
+
+    function extractCells(imageData, gridSize) {
+      const cellSize = SIZE / gridSize;
+      const result = [];
+      for (let cellIndex = 0; cellIndex < gridSize * gridSize; cellIndex++) {
+        const cx = cellIndex % gridSize;
+        const cy = Math.floor(cellIndex / gridSize);
+        const sx = Math.floor(cx * cellSize);
+        const sy = Math.floor(cy * cellSize);
+        const rgba = new Uint8ClampedArray(cellSize * cellSize * 4);
+        const sums = Array(FEATURE_SIZE * FEATURE_SIZE).fill(0);
+        const counts = Array(FEATURE_SIZE * FEATURE_SIZE).fill(0);
+        let out = 0;
+        for (let y = 0; y < cellSize; y++) {
+          for (let x = 0; x < cellSize; x++) {
+            const src = ((sy + y) * SIZE + (sx + x)) * 4;
+            const r = imageData.data[src], g = imageData.data[src + 1], b = imageData.data[src + 2], a = imageData.data[src + 3];
+            rgba[out++] = r; rgba[out++] = g; rgba[out++] = b; rgba[out++] = a;
+            const bx = Math.min(FEATURE_SIZE - 1, Math.floor((x / cellSize) * FEATURE_SIZE));
+            const by = Math.min(FEATURE_SIZE - 1, Math.floor((y / cellSize) * FEATURE_SIZE));
+            const bi = by * FEATURE_SIZE + bx;
+            sums[bi] += gray(r, g, b);
+            counts[bi] += 1;
+          }
+        }
+        result.push({ index: cellIndex, rgba, vector: sums.map((sum, i) => sum / Math.max(1, counts[i])) });
+      }
+      return result;
+    }
+
+    function squaredDistance(a, b) {
+      let sum = 0;
+      for (let i = 0; i < a.length; i++) { const d = a[i] - b[i]; sum += d * d; }
+      return sum;
+    }
+
+    function buildCostMatrix(vectorsA, vectorsB) {
+      const n = vectorsA.length;
+      const cost = Array.from({ length: n }, () => Array(n));
+      for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) cost[i][j] = squaredDistance(vectorsA[i], vectorsB[j]);
+      return cost;
+    }
+
+    function hungarian(cost) {
+      const n = cost.length;
+      const m = cost[0].length;
+      const u = Array(n + 1).fill(0), v = Array(m + 1).fill(0), p = Array(m + 1).fill(0), way = Array(m + 1).fill(0);
+      for (let i = 1; i <= n; i++) {
+        p[0] = i;
+        let j0 = 0;
+        const minv = Array(m + 1).fill(Infinity);
+        const used = Array(m + 1).fill(false);
+        do {
+          used[j0] = true;
+          const i0 = p[j0];
+          let delta = Infinity, j1 = 0;
+          for (let j = 1; j <= m; j++) if (!used[j]) {
+            const cur = cost[i0 - 1][j - 1] - u[i0] - v[j];
+            if (cur < minv[j]) { minv[j] = cur; way[j] = j0; }
+            if (minv[j] < delta) { delta = minv[j]; j1 = j; }
+          }
+          for (let j = 0; j <= m; j++) {
+            if (used[j]) { u[p[j]] += delta; v[j] -= delta; }
+            else minv[j] -= delta;
+          }
+          j0 = j1;
+        } while (p[j0] !== 0);
+        do {
+          const j1 = way[j0];
+          p[j0] = p[j1];
+          j0 = j1;
+        } while (j0 !== 0);
+      }
+      const ans = Array(n);
+      for (let j = 1; j <= m; j++) if (p[j] > 0) ans[p[j] - 1] = j - 1;
+      return ans;
+    }
+
+    function greedyAssignment(cost) {
+      const n = cost.length;
+      const used = Array(n).fill(false);
+      const assign = Array(n);
+      for (let i = 0; i < n; i++) {
+        let best = -1, bestCost = Infinity;
+        for (let j = 0; j < n; j++) {
+          if (!used[j] && cost[i][j] < bestCost) { bestCost = cost[i][j]; best = j; }
+        }
+        assign[i] = best;
+        used[best] = true;
+      }
+      return assign;
+    }
+
+    function solveAssignment(cost) {
+      if (cost.length <= HUNGARIAN_LIMIT) return hungarian(cost);
+      return greedyAssignment(cost);
+    }
+
+    function averageVector(a, b) { return a.map((value, i) => (value + b[i]) / 2); }
+
+    function invertAssignment(assign) {
+      const inv = Array(assign.length);
+      for (let i = 0; i < assign.length; i++) inv[assign[i]] = i;
+      return inv;
+    }
+
+    function mergeCells(cellA, cellB, cellC) {
+      const out = new Uint8ClampedArray(cellA.length);
+      for (let i = 0; i < cellA.length; i += 4) {
+        out[i] = Math.round((cellA[i] + cellB[i] + cellC[i]) / 3);
+        out[i + 1] = Math.round((cellA[i + 1] + cellB[i + 1] + cellC[i + 1]) / 3);
+        out[i + 2] = Math.round((cellA[i + 2] + cellB[i + 2] + cellC[i + 2]) / 3);
+        out[i + 3] = 255;
       }
       return out;
+    }
+
+    function putCell(imageData, rgba, targetIndex, gridSize) {
+      const cellSize = SIZE / gridSize;
+      const tx = (targetIndex % gridSize) * cellSize;
+      const ty = Math.floor(targetIndex / gridSize) * cellSize;
+      let src = 0;
+      for (let y = 0; y < cellSize; y++) {
+        for (let x = 0; x < cellSize; x++) {
+          const dst = ((ty + y) * SIZE + (tx + x)) * 4;
+          imageData.data[dst] = rgba[src++];
+          imageData.data[dst + 1] = rgba[src++];
+          imageData.data[dst + 2] = rgba[src++];
+          imageData.data[dst + 3] = rgba[src++];
+        }
+      }
+    }
+
+    function buildImageFromMergedPieces(mergedPieces, placement, gridSize) {
+      const out = ctx.createImageData(SIZE, SIZE);
+      for (let i = 0; i < mergedPieces.length; i++) putCell(out, mergedPieces[i], placement[i], gridSize);
+      return out;
+    }
+
+    function runAssignmentPipeline() {
+      const gridSize = Number(gridSelect.value);
+      sourceData = images.map(imageToData);
+      cells = sourceData.map((data) => extractCells(data, gridSize));
+      const count = gridSize * gridSize;
+      const vectors = cells.map((set) => set.map((cell) => cell.vector));
+
+      const naivePieces = Array.from({ length: count }, (_, i) => mergeCells(cells[0][i].rgba, cells[1][i].rgba, cells[2][i].rgba));
+      const identity = Array.from({ length: count }, (_, i) => i);
+
+      const cost12 = buildCostMatrix(vectors[0], vectors[1]);
+      const p12 = solveAssignment(cost12);
+      const centroid12 = vectors[0].map((vector, i) => averageVector(vector, vectors[1][p12[i]]));
+      const cost13 = buildCostMatrix(centroid12, vectors[2]);
+      const p13 = solveAssignment(cost13);
+      const invP12 = invertAssignment(p12);
+      const invP13 = invertAssignment(p13);
+
+      const assignedPieces = Array.from({ length: count }, (_, i) => mergeCells(cells[0][i].rgba, cells[1][p12[i]].rgba, cells[2][p13[i]].rgba));
+
+      assignments = { p12, p13, invP12, invP13 };
+      views = {
+        assigned: buildImageFromMergedPieces(assignedPieces, identity, gridSize),
+        naive: buildImageFromMergedPieces(naivePieces, identity, gridSize),
+        recon1: buildImageFromMergedPieces(assignedPieces, identity, gridSize),
+        recon2: buildImageFromMergedPieces(assignedPieces, p12, gridSize),
+        recon3: buildImageFromMergedPieces(assignedPieces, p13, gridSize),
+        source1: sourceData[0],
+        source2: sourceData[1],
+        source3: sourceData[2],
+      };
+      assignmentMethod = count <= HUNGARIAN_LIMIT ? 'Hungarian' : 'Greedy';
     }
 
     function resetPieces() {
@@ -306,16 +445,11 @@
       const n = Number(gridSelect.value);
       gridStat.textContent = `${n}×${n}`;
       pieceStat.textContent = String(n * n);
-      blankStat.textContent = blankIndex === null ? 'なし' : String(blankIndex);
+      methodStat.textContent = assignmentMethod;
       moveStat.textContent = String(moves);
     }
 
-    function dataForView() {
-      if (currentView === 'image0') return sourceData[0];
-      if (currentView === 'image1') return sourceData[1];
-      if (currentView === 'image2') return sourceData[2];
-      return mergedData;
-    }
+    function dataForView() { return views[currentView] || views.assigned; }
 
     function draw(data) {
       const n = Number(gridSelect.value);
@@ -327,26 +461,21 @@
         ctx.fillText('画像を読み込み中', SIZE / 2, SIZE / 2);
         return;
       }
-      const temp = document.createElement('canvas');
-      temp.width = SIZE;
-      temp.height = SIZE;
+      const temp = document.createElement('canvas'); temp.width = SIZE; temp.height = SIZE;
       temp.getContext('2d').putImageData(data, 0, 0);
       for (let i = 0; i < pieces.length; i++) {
         const piece = pieces[i];
-        const dx = (i % n) * cell;
-        const dy = Math.floor(i / n) * cell;
+        const dx = (i % n) * cell, dy = Math.floor(i / n) * cell;
         if (piece === null) {
           ctx.fillStyle = '#101522'; ctx.fillRect(dx, dy, cell, cell);
           ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = `${Math.max(10, cell / 4)}px sans-serif`;
           ctx.fillText('空白', dx + cell / 2, dy + cell / 2 + 4);
           continue;
         }
-        const sx = (piece % n) * cell;
-        const sy = Math.floor(piece / n) * cell;
+        const sx = (piece % n) * cell, sy = Math.floor(piece / n) * cell;
         ctx.drawImage(temp, sx, sy, cell, cell, dx, dy, cell, cell);
       }
-      ctx.strokeStyle = 'rgba(255,255,255,.45)';
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = 'rgba(255,255,255,.45)'; ctx.lineWidth = 1;
       for (let i = 1; i < n; i++) {
         ctx.beginPath(); ctx.moveTo(i * cell, 0); ctx.lineTo(i * cell, SIZE); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(0, i * cell); ctx.lineTo(SIZE, i * cell); ctx.stroke();
@@ -355,12 +484,18 @@
 
     function makeTabs() {
       tabs.innerHTML = '';
-      [['merged', '合成駒'], ['image0', '画像1'], ['image1', '画像2'], ['image2', '画像3']].forEach(([view, label]) => {
+      [
+        ['assigned', '割当合成駒'],
+        ['naive', '同位置合成駒'],
+        ['recon1', '再構築1'],
+        ['recon2', '再構築2'],
+        ['recon3', '再構築3'],
+        ['source1', '元画像1'],
+        ['source2', '元画像2'],
+        ['source3', '元画像3'],
+      ].forEach(([view, label]) => {
         const tab = document.createElement('button');
-        tab.type = 'button';
-        tab.className = 'tab';
-        tab.dataset.view = view;
-        tab.textContent = label;
+        tab.type = 'button'; tab.className = 'tab'; tab.dataset.view = view; tab.textContent = label;
         tab.addEventListener('click', () => { currentView = view; render(); });
         tabs.appendChild(tab);
       });
@@ -372,18 +507,19 @@
       [...tabs.children].forEach((tab) => tab.classList.toggle('active', tab.dataset.view === currentView));
     }
 
-    function build(text = '合成駒を作成しました。') {
-      if (images.some((img) => !img)) {
-        setMessage('3枚すべての画像を読み込んでください。');
-        return;
-      }
-      sourceData = images.map(imageToData);
-      mergedData = averageData(sourceData);
-      currentView = 'merged';
-      resetPieces();
-      makeTabs();
-      render();
-      setMessage(text);
+    function build(text) {
+      if (images.some((img) => !img)) { setMessage('3枚すべての画像を読み込んでください。'); return; }
+      setMessage('割り当てを計算中です。');
+      setTimeout(() => {
+        runAssignmentPipeline();
+        currentView = 'assigned';
+        resetPieces();
+        makeTabs();
+        render();
+        const n = Number(gridSelect.value);
+        const method = n * n <= HUNGARIAN_LIMIT ? 'ハンガリー法' : '簡易greedy';
+        setMessage(text || `${method}で割り当てを計算し、合成駒を作成しました。`);
+      }, 20);
     }
 
     function slideToBlank(index, countMove = true) {
@@ -406,7 +542,7 @@
     }
 
     function shufflePuzzle() {
-      if (!mergedData) { setMessage('先に合成駒を作ってください。'); return; }
+      if (!views.assigned) { setMessage('先に合成駒を作ってください。'); return; }
       const n = Number(gridSelect.value);
       pieces = Array.from({ length: n * n }, (_, i) => i);
       blankIndex = n * n - 1;
@@ -421,17 +557,11 @@
         }
         slideToBlank(candidates[Math.floor(Math.random() * candidates.length)], false);
       }
-      moves = 0;
-      render();
+      moves = 0; render();
       setMessage('スライドパズル化しました。空白と同じ行・列のピースをクリックすると、間のピースがまとめてスライドします。');
     }
 
-    function solvePuzzle() {
-      if (!mergedData) return;
-      resetPieces();
-      render();
-      setMessage('元の配置に戻しました。');
-    }
+    function solvePuzzle() { if (!views.assigned) return; resetPieces(); render(); setMessage('元の配置に戻しました。'); }
 
     canvas.addEventListener('click', (event) => {
       if (blankIndex === null) return;
@@ -444,15 +574,11 @@
 
     fileInputs.forEach((input, index) => {
       input.addEventListener('change', () => {
-        const file = input.files && input.files[0];
-        if (!file) return;
+        const file = input.files && input.files[0]; if (!file) return;
         const reader = new FileReader();
         reader.onload = () => {
           const img = new Image();
-          img.onload = () => {
-            images[index] = img;
-            build(`画像${index + 1}を差し替え、合成駒を更新しました。`);
-          };
+          img.onload = () => { images[index] = img; build(`画像${index + 1}を差し替え、割り当てと合成駒を更新しました。`); };
           img.src = reader.result;
         };
         reader.readAsDataURL(file);
@@ -463,15 +589,7 @@
     document.getElementById('buildButton').addEventListener('click', () => build());
     document.getElementById('shuffleButton').addEventListener('click', shufflePuzzle);
     document.getElementById('solveButton').addEventListener('click', solvePuzzle);
-    gridSelect.addEventListener('change', () => {
-      if (mergedData) {
-        resetPieces();
-        render();
-        setMessage('分割数を変更しました。合成駒の見え方が変わります。');
-      } else {
-        setStats();
-      }
-    });
+    gridSelect.addEventListener('change', () => build('分割数を変更し、割り当てを再計算しました。'));
 
     resetPieces();
     makeTabs();
