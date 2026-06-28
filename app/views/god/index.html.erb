@@ -31,7 +31,7 @@
         </select>
       </label>
 
-      <button id="sampleButton" type="button">サンプルを生成</button>
+      <button id="sampleButton" type="button">絵画サンプルを読み込む</button>
       <button id="shuffleButton" type="button">シャッフル</button>
       <button id="solveButton" type="button">元に戻す</button>
     </div>
@@ -41,9 +41,10 @@
     </div>
 
     <p class="hint">
-      ピースをクリックすると選択できます。別のピースをクリックすると入れ替わります。
-      現段階ではブラウザ上の描画試作版で、shu-ron側の距離計算・最適化処理を接続するための土台です。
+      黒いマスが空白です。空白と同じ行・列にあるピースをクリックすると、間のピースがまとめてスライドします。
+      これは puzzle-Processing 側の「空白マスを使って行・列をずらす」動きに寄せた試作版です。
     </p>
+    <p id="sampleCredit" class="hint sample-credit"></p>
   </section>
 </main>
 
@@ -56,18 +57,40 @@
   const sampleButton = document.getElementById('sampleButton');
   const shuffleButton = document.getElementById('shuffleButton');
   const solveButton = document.getElementById('solveButton');
+  const sampleCredit = document.getElementById('sampleCredit');
+
+  const sampleArtworks = [
+    {
+      title: '葛飾北斎「神奈川沖浪裏」',
+      url: 'https://commons.wikimedia.org/wiki/Special:FilePath/Tsunami_by_hokusai_19th_century.jpg',
+      credit: 'サンプル画像: 葛飾北斎「神奈川沖浪裏」 / Wikimedia Commons'
+    },
+    {
+      title: 'フィンセント・ファン・ゴッホ「星月夜」',
+      url: 'https://commons.wikimedia.org/wiki/Special:FilePath/Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg',
+      credit: 'サンプル画像: フィンセント・ファン・ゴッホ「星月夜」 / Wikimedia Commons'
+    }
+  ];
 
   const state = {
     image: null,
     gridSize: Number(gridSizeSelect.value),
     pieces: [],
-    selectedIndex: null
+    blankIndex: 0,
+    steps: 0
   };
+
+  function totalPieces() {
+    return state.gridSize * state.gridSize;
+  }
 
   function buildPieces(size) {
     state.gridSize = size;
-    state.pieces = Array.from({ length: size * size }, (_, index) => index);
-    state.selectedIndex = null;
+    const total = totalPieces();
+    state.pieces = Array.from({ length: total }, (_, index) => index);
+    state.pieces[total - 1] = null;
+    state.blankIndex = total - 1;
+    state.steps = 0;
   }
 
   function drawPlaceholder() {
@@ -84,13 +107,13 @@
     }
 
     ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
-    ctx.fillRect(size * 0.15, size * 0.42, size * 0.7, size * 0.16);
+    ctx.fillRect(size * 0.12, size * 0.40, size * 0.76, size * 0.20);
     ctx.fillStyle = '#1f2937';
     ctx.font = 'bold 28px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('研究パズル Web デモ', size / 2, size / 2);
+    ctx.fillText('研究パズル Web デモ', size / 2, size / 2 - 10);
     ctx.font = '16px sans-serif';
-    ctx.fillText('画像を選ぶか、サンプル生成を押してください', size / 2, size / 2 + 32);
+    ctx.fillText('画像を選ぶか、絵画サンプルを読み込んでください', size / 2, size / 2 + 26);
 
     drawGrid();
   }
@@ -112,6 +135,17 @@
     }
   }
 
+  function drawBlankCell(index, cell) {
+    const x = (index % state.gridSize) * cell;
+    const y = Math.floor(index / state.gridSize) * cell;
+    ctx.fillStyle = '#111827';
+    ctx.fillRect(x, y, cell, cell);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `${Math.max(14, cell * 0.18)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText('空白', x + cell / 2, y + cell / 2 + 5);
+  }
+
   function drawPuzzle() {
     const size = canvas.width;
     const grid = state.gridSize;
@@ -129,6 +163,11 @@
     const sourceCell = imageSide / grid;
 
     state.pieces.forEach((sourceIndex, displayIndex) => {
+      if (sourceIndex === null) {
+        drawBlankCell(displayIndex, cell);
+        return;
+      }
+
       const sx = (sourceIndex % grid) * sourceCell + sourceX;
       const sy = Math.floor(sourceIndex / grid) * sourceCell + sourceY;
       const dx = (displayIndex % grid) * cell;
@@ -137,22 +176,84 @@
     });
 
     drawGrid();
+  }
 
-    if (state.selectedIndex !== null) {
-      const x = (state.selectedIndex % grid) * cell;
-      const y = Math.floor(state.selectedIndex / grid) * cell;
-      ctx.strokeStyle = '#facc15';
-      ctx.lineWidth = 6;
-      ctx.strokeRect(x + 3, y + 3, cell - 6, cell - 6);
+  function isSameRowOrColumn(indexA, indexB) {
+    return Math.floor(indexA / state.gridSize) === Math.floor(indexB / state.gridSize) ||
+      indexA % state.gridSize === indexB % state.gridSize;
+  }
+
+  function slideToBlank(clickedIndex) {
+    if (clickedIndex === state.blankIndex) return;
+    if (!isSameRowOrColumn(clickedIndex, state.blankIndex)) return;
+
+    const grid = state.gridSize;
+    const clickedX = clickedIndex % grid;
+    const clickedY = Math.floor(clickedIndex / grid);
+    const blankX = state.blankIndex % grid;
+    const blankY = Math.floor(state.blankIndex / grid);
+
+    if (clickedY === blankY) {
+      const step = clickedX < blankX ? 1 : -1;
+      for (let x = blankX; x !== clickedX; x -= step) {
+        const from = blankY * grid + (x - step);
+        const to = blankY * grid + x;
+        state.pieces[to] = state.pieces[from];
+      }
+    } else {
+      const step = clickedY < blankY ? 1 : -1;
+      for (let y = blankY; y !== clickedY; y -= step) {
+        const from = (y - step) * grid + blankX;
+        const to = y * grid + blankX;
+        state.pieces[to] = state.pieces[from];
+      }
     }
+
+    state.pieces[clickedIndex] = null;
+    state.blankIndex = clickedIndex;
+    state.steps += Math.abs(clickedX - blankX) + Math.abs(clickedY - blankY);
+    drawPuzzle();
+  }
+
+  function inversionCount(values) {
+    let count = 0;
+    for (let i = 0; i < values.length; i += 1) {
+      for (let j = i + 1; j < values.length; j += 1) {
+        if (values[i] > values[j]) count += 1;
+      }
+    }
+    return count;
+  }
+
+  function isSolvable(pieces, blankIndex) {
+    const grid = state.gridSize;
+    const values = pieces.filter((piece) => piece !== null);
+    const inv = inversionCount(values);
+
+    if (grid % 2 === 1) return inv % 2 === 0;
+
+    const blankRowFromBottom = grid - Math.floor(blankIndex / grid);
+    return (blankRowFromBottom % 2 === 0) !== (inv % 2 === 0);
   }
 
   function shufflePieces() {
-    for (let i = state.pieces.length - 1; i > 0; i -= 1) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [state.pieces[i], state.pieces[j]] = [state.pieces[j], state.pieces[i]];
-    }
-    state.selectedIndex = null;
+    const total = totalPieces();
+    let pieces;
+    let blankIndex;
+
+    do {
+      pieces = Array.from({ length: total }, (_, index) => index);
+      pieces[total - 1] = null;
+      for (let i = pieces.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [pieces[i], pieces[j]] = [pieces[j], pieces[i]];
+      }
+      blankIndex = pieces.indexOf(null);
+    } while (!isSolvable(pieces, blankIndex));
+
+    state.pieces = pieces;
+    state.blankIndex = blankIndex;
+    state.steps = 0;
     drawPuzzle();
   }
 
@@ -161,39 +262,24 @@
     drawPuzzle();
   }
 
-  function createSampleImage() {
-    const sample = document.createElement('canvas');
-    sample.width = 900;
-    sample.height = 900;
-    const sctx = sample.getContext('2d');
-    const gradient = sctx.createLinearGradient(0, 0, sample.width, sample.height);
-    gradient.addColorStop(0, '#0ea5e9');
-    gradient.addColorStop(0.5, '#8b5cf6');
-    gradient.addColorStop(1, '#f97316');
-    sctx.fillStyle = gradient;
-    sctx.fillRect(0, 0, sample.width, sample.height);
-
-    sctx.fillStyle = 'rgba(255, 255, 255, 0.18)';
-    for (let i = 0; i < 16; i += 1) {
-      sctx.beginPath();
-      sctx.arc(80 + i * 54, 160 + (i % 4) * 120, 70 + (i % 3) * 18, 0, Math.PI * 2);
-      sctx.fill();
-    }
-
-    sctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
-    sctx.font = 'bold 72px sans-serif';
-    sctx.textAlign = 'center';
-    sctx.fillText('研究パズル', sample.width / 2, sample.height / 2 - 20);
-    sctx.font = '32px sans-serif';
-    sctx.fillText('セル分割 → 描画 → 復元', sample.width / 2, sample.height / 2 + 46);
-
+  function loadImageFromUrl(url, onload) {
     const img = new Image();
-    img.onload = () => {
+    img.onload = () => onload(img);
+    img.onerror = () => {
+      sampleCredit.textContent = 'サンプル画像の読み込みに失敗しました。別の画像を選択してください。';
+    };
+    img.src = url;
+  }
+
+  function loadSampleArtwork() {
+    const artwork = sampleArtworks[Math.floor(Math.random() * sampleArtworks.length)];
+    sampleCredit.textContent = `${artwork.title} を読み込み中...`;
+    loadImageFromUrl(artwork.url, (img) => {
       state.image = img;
       buildPieces(Number(gridSizeSelect.value));
       shufflePieces();
-    };
-    img.src = sample.toDataURL('image/png');
+      sampleCredit.textContent = artwork.credit;
+    });
   }
 
   imageInput.addEventListener('change', (event) => {
@@ -207,6 +293,7 @@
         state.image = img;
         buildPieces(Number(gridSizeSelect.value));
         shufflePieces();
+        sampleCredit.textContent = 'サンプル画像ではなく、選択した画像を使用しています。';
       };
       img.src = reader.result;
     };
@@ -215,7 +302,8 @@
 
   gridSizeSelect.addEventListener('change', () => {
     buildPieces(Number(gridSizeSelect.value));
-    drawPuzzle();
+    if (state.image) shufflePieces();
+    else drawPuzzle();
   });
 
   canvas.addEventListener('click', (event) => {
@@ -226,20 +314,10 @@
     const y = (event.clientY - rect.top) * scaleY;
     const cell = canvas.width / state.gridSize;
     const index = Math.floor(y / cell) * state.gridSize + Math.floor(x / cell);
-
-    if (state.selectedIndex === null) {
-      state.selectedIndex = index;
-    } else if (state.selectedIndex === index) {
-      state.selectedIndex = null;
-    } else {
-      [state.pieces[state.selectedIndex], state.pieces[index]] = [state.pieces[index], state.pieces[state.selectedIndex]];
-      state.selectedIndex = null;
-    }
-
-    drawPuzzle();
+    slideToBlank(index);
   });
 
-  sampleButton.addEventListener('click', createSampleImage);
+  sampleButton.addEventListener('click', loadSampleArtwork);
   shuffleButton.addEventListener('click', shufflePieces);
   solveButton.addEventListener('click', solvePieces);
 
