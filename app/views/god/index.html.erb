@@ -1,8 +1,249 @@
-<h1 class="display-4"><%= @title %></h1>
-<p><%= @msg %></p>
-<form method='POST' action="/god/index">
-    <input type="text" class="form-control"
-        name="input1" value="<%= @value %>"
-    >
-    <input type="submit" class="btn btn-primary">
-</form>
+<main class="research-app">
+  <section class="hero-card">
+    <p class="eyebrow">研究 × Webアプリ</p>
+    <h1><%= @title %></h1>
+    <p class="lead"><%= @subtitle %></p>
+
+    <div class="research-notes">
+      <h2>このデモでできること</h2>
+      <ul>
+        <% @research_points.each do |point| %>
+          <li><%= point %></li>
+        <% end %>
+      </ul>
+    </div>
+  </section>
+
+  <section class="workspace-card">
+    <div class="controls">
+      <label class="file-control">
+        <span>画像を選択</span>
+        <input id="imageInput" type="file" accept="image/*">
+      </label>
+
+      <label>
+        分割数
+        <select id="gridSize">
+          <option value="3">3 × 3</option>
+          <option value="4" selected>4 × 4</option>
+          <option value="5">5 × 5</option>
+          <option value="6">6 × 6</option>
+        </select>
+      </label>
+
+      <button id="sampleButton" type="button">サンプルを生成</button>
+      <button id="shuffleButton" type="button">シャッフル</button>
+      <button id="solveButton" type="button">元に戻す</button>
+    </div>
+
+    <div class="canvas-wrap">
+      <canvas id="puzzleCanvas" width="640" height="640" aria-label="パズル描画キャンバス"></canvas>
+    </div>
+
+    <p class="hint">
+      ピースをクリックすると選択できます。別のピースをクリックすると入れ替わります。
+      現段階ではブラウザ上の描画試作版で、shu-ron側の距離計算・最適化処理を接続するための土台です。
+    </p>
+  </section>
+</main>
+
+<script>
+(() => {
+  const canvas = document.getElementById('puzzleCanvas');
+  const ctx = canvas.getContext('2d');
+  const imageInput = document.getElementById('imageInput');
+  const gridSizeSelect = document.getElementById('gridSize');
+  const sampleButton = document.getElementById('sampleButton');
+  const shuffleButton = document.getElementById('shuffleButton');
+  const solveButton = document.getElementById('solveButton');
+
+  const state = {
+    image: null,
+    gridSize: Number(gridSizeSelect.value),
+    pieces: [],
+    selectedIndex: null
+  };
+
+  function buildPieces(size) {
+    state.gridSize = size;
+    state.pieces = Array.from({ length: size * size }, (_, index) => index);
+    state.selectedIndex = null;
+  }
+
+  function drawPlaceholder() {
+    const size = canvas.width;
+    ctx.clearRect(0, 0, size, size);
+    const cell = size / state.gridSize;
+
+    for (let y = 0; y < state.gridSize; y += 1) {
+      for (let x = 0; x < state.gridSize; x += 1) {
+        const hue = 210 + x * 12 + y * 8;
+        ctx.fillStyle = `hsl(${hue}, 70%, ${55 + ((x + y) % 2) * 10}%)`;
+        ctx.fillRect(x * cell, y * cell, cell, cell);
+      }
+    }
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+    ctx.fillRect(size * 0.15, size * 0.42, size * 0.7, size * 0.16);
+    ctx.fillStyle = '#1f2937';
+    ctx.font = 'bold 28px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('研究パズル Web デモ', size / 2, size / 2);
+    ctx.font = '16px sans-serif';
+    ctx.fillText('画像を選ぶか、サンプル生成を押してください', size / 2, size / 2 + 32);
+
+    drawGrid();
+  }
+
+  function drawGrid() {
+    const size = canvas.width;
+    const cell = size / state.gridSize;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+    ctx.lineWidth = 2;
+    for (let i = 0; i <= state.gridSize; i += 1) {
+      ctx.beginPath();
+      ctx.moveTo(i * cell, 0);
+      ctx.lineTo(i * cell, size);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(0, i * cell);
+      ctx.lineTo(size, i * cell);
+      ctx.stroke();
+    }
+  }
+
+  function drawPuzzle() {
+    const size = canvas.width;
+    const grid = state.gridSize;
+    const cell = size / grid;
+    ctx.clearRect(0, 0, size, size);
+
+    if (!state.image) {
+      drawPlaceholder();
+      return;
+    }
+
+    const imageSide = Math.min(state.image.width, state.image.height);
+    const sourceX = (state.image.width - imageSide) / 2;
+    const sourceY = (state.image.height - imageSide) / 2;
+    const sourceCell = imageSide / grid;
+
+    state.pieces.forEach((sourceIndex, displayIndex) => {
+      const sx = (sourceIndex % grid) * sourceCell + sourceX;
+      const sy = Math.floor(sourceIndex / grid) * sourceCell + sourceY;
+      const dx = (displayIndex % grid) * cell;
+      const dy = Math.floor(displayIndex / grid) * cell;
+      ctx.drawImage(state.image, sx, sy, sourceCell, sourceCell, dx, dy, cell, cell);
+    });
+
+    drawGrid();
+
+    if (state.selectedIndex !== null) {
+      const x = (state.selectedIndex % grid) * cell;
+      const y = Math.floor(state.selectedIndex / grid) * cell;
+      ctx.strokeStyle = '#facc15';
+      ctx.lineWidth = 6;
+      ctx.strokeRect(x + 3, y + 3, cell - 6, cell - 6);
+    }
+  }
+
+  function shufflePieces() {
+    for (let i = state.pieces.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [state.pieces[i], state.pieces[j]] = [state.pieces[j], state.pieces[i]];
+    }
+    state.selectedIndex = null;
+    drawPuzzle();
+  }
+
+  function solvePieces() {
+    buildPieces(state.gridSize);
+    drawPuzzle();
+  }
+
+  function createSampleImage() {
+    const sample = document.createElement('canvas');
+    sample.width = 900;
+    sample.height = 900;
+    const sctx = sample.getContext('2d');
+    const gradient = sctx.createLinearGradient(0, 0, sample.width, sample.height);
+    gradient.addColorStop(0, '#0ea5e9');
+    gradient.addColorStop(0.5, '#8b5cf6');
+    gradient.addColorStop(1, '#f97316');
+    sctx.fillStyle = gradient;
+    sctx.fillRect(0, 0, sample.width, sample.height);
+
+    sctx.fillStyle = 'rgba(255, 255, 255, 0.18)';
+    for (let i = 0; i < 16; i += 1) {
+      sctx.beginPath();
+      sctx.arc(80 + i * 54, 160 + (i % 4) * 120, 70 + (i % 3) * 18, 0, Math.PI * 2);
+      sctx.fill();
+    }
+
+    sctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+    sctx.font = 'bold 72px sans-serif';
+    sctx.textAlign = 'center';
+    sctx.fillText('研究パズル', sample.width / 2, sample.height / 2 - 20);
+    sctx.font = '32px sans-serif';
+    sctx.fillText('セル分割 → 描画 → 復元', sample.width / 2, sample.height / 2 + 46);
+
+    const img = new Image();
+    img.onload = () => {
+      state.image = img;
+      buildPieces(Number(gridSizeSelect.value));
+      shufflePieces();
+    };
+    img.src = sample.toDataURL('image/png');
+  }
+
+  imageInput.addEventListener('change', (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        state.image = img;
+        buildPieces(Number(gridSizeSelect.value));
+        shufflePieces();
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+
+  gridSizeSelect.addEventListener('change', () => {
+    buildPieces(Number(gridSizeSelect.value));
+    drawPuzzle();
+  });
+
+  canvas.addEventListener('click', (event) => {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (event.clientX - rect.left) * scaleX;
+    const y = (event.clientY - rect.top) * scaleY;
+    const cell = canvas.width / state.gridSize;
+    const index = Math.floor(y / cell) * state.gridSize + Math.floor(x / cell);
+
+    if (state.selectedIndex === null) {
+      state.selectedIndex = index;
+    } else if (state.selectedIndex === index) {
+      state.selectedIndex = null;
+    } else {
+      [state.pieces[state.selectedIndex], state.pieces[index]] = [state.pieces[index], state.pieces[state.selectedIndex]];
+      state.selectedIndex = null;
+    }
+
+    drawPuzzle();
+  });
+
+  sampleButton.addEventListener('click', createSampleImage);
+  shuffleButton.addEventListener('click', shufflePieces);
+  solveButton.addEventListener('click', solvePieces);
+
+  buildPieces(state.gridSize);
+  drawPlaceholder();
+})();
+</script>
