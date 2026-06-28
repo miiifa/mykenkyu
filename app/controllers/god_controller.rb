@@ -2,8 +2,8 @@ class GodController < ApplicationController
   protect_from_forgery
 
   def index
-    @title = 'Puzzle Research Web Demo'
-    @subtitle = '修士研究のパズル生成・描画処理をWeb上で体験するためのMVPです。'
+    @title = '研究パズル Web デモ'
+    @subtitle = '修士研究のパズル生成・描画処理を、ブラウザ上で体験するための試作版です。'
     @research_points = [
       '入力画像を格子状のセルに分割する',
       'セルをシャッフルしてパズルとして描画する',
