@@ -1,6 +1,6 @@
 <main class="research-app">
   <section class="hero-card">
-    <p class="eyebrow">Research × Web App</p>
+    <p class="eyebrow">研究 × Webアプリ</p>
     <h1><%= @title %></h1>
     <p class="lead"><%= @subtitle %></p>
 
@@ -31,9 +31,9 @@
         </select>
       </label>
 
-      <button id="sampleButton" type="button">サンプル生成</button>
+      <button id="sampleButton" type="button">サンプルを生成</button>
       <button id="shuffleButton" type="button">シャッフル</button>
-      <button id="solveButton" type="button">復元</button>
+      <button id="solveButton" type="button">元に戻す</button>
     </div>
 
     <div class="canvas-wrap">
@@ -42,7 +42,7 @@
 
     <p class="hint">
       ピースをクリックすると選択できます。別のピースをクリックすると入れ替わります。
-      現段階ではブラウザ上の描画MVPで、shu-ron側の距離計算・最適化処理を接続する土台です。
+      現段階ではブラウザ上の描画試作版で、shu-ron側の距離計算・最適化処理を接続するための土台です。
     </p>
   </section>
 </main>
@@ -88,7 +88,7 @@
     ctx.fillStyle = '#1f2937';
     ctx.font = 'bold 28px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('Puzzle Research Demo', size / 2, size / 2);
+    ctx.fillText('研究パズル Web デモ', size / 2, size / 2);
     ctx.font = '16px sans-serif';
     ctx.fillText('画像を選ぶか、サンプル生成を押してください', size / 2, size / 2 + 32);
 
@@ -185,7 +185,7 @@
     sctx.textAlign = 'center';
     sctx.fillText('研究パズル', sample.width / 2, sample.height / 2 - 20);
     sctx.font = '32px sans-serif';
-    sctx.fillText('cell分割 → 描画 → 復元', sample.width / 2, sample.height / 2 + 46);
+    sctx.fillText('セル分割 → 描画 → 復元', sample.width / 2, sample.height / 2 + 46);
 
     const img = new Image();
     img.onload = () => {
