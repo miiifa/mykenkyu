@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>研究紹介 | 研究パズル Web デモ</title>
+  <style>
+    :root{--ink:#172033;--muted:#627083;--line:#dce3ec;--paper:#f6f8fb;--card:rgba(255,255,255,.92);--accent:#4f66f0;--accent2:#20a39e;--shadow:0 20px 50px rgba(23,32,51,.12)}
+    *{box-sizing:border-box} html{scroll-behavior:smooth} body{margin:0;color:var(--ink);background:radial-gradient(circle at 0 0,rgba(79,102,240,.14),transparent 34rem),radial-gradient(circle at 85% 4%,rgba(32,163,158,.14),transparent 28rem),var(--paper);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;line-height:1.8}.page{width:min(1100px,calc(100% - 32px));margin:0 auto;padding:28px 0 56px}.nav{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-bottom:22px;padding:12px 16px;background:rgba(255,255,255,.82);border:1px solid var(--line);border-radius:999px;box-shadow:0 10px 24px rgba(23,32,51,.08);position:sticky;top:12px;z-index:10;backdrop-filter:blur(10px)}.nav a{text-decoration:none;color:var(--ink);font-weight:900}.links{display:flex;flex-wrap:wrap;gap:10px}.links a{padding:7px 11px;border-radius:999px;background:#eef2ff;color:#3443b6;font-size:13px}.hero,.panel{background:var(--card);border:1px solid rgba(220,227,236,.95);border-radius:28px;box-shadow:var(--shadow);backdrop-filter:blur(10px)}.hero{padding:clamp(28px,5vw,56px);margin-bottom:24px}.panel{padding:24px;margin-bottom:20px}.eyebrow{display:inline-flex;padding:6px 12px;border-radius:999px;background:rgba(79,102,240,.1);color:#3348cf;font-size:13px;font-weight:900}h1{margin:18px 0 16px;font-size:clamp(34px,6vw,64px);line-height:1.08;letter-spacing:-.06em}h2{margin-top:0;letter-spacing:-.04em}h3{margin-bottom:6px}.lead,p{color:var(--muted)}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.card{padding:18px;border:1px solid var(--line);border-radius:20px;background:#fff}.quote{padding:18px 20px;border-left:5px solid var(--accent);border-radius:18px;background:rgba(79,102,240,.07);color:#2f3b5c;font-weight:800}.badges{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.badge{padding:5px 10px;border-radius:999px;background:#eef2ff;color:#3443b6;font-size:12px;font-weight:900}.thanks{background:linear-gradient(135deg,rgba(255,255,255,.96),rgba(255,250,232,.96));border-color:#f2d891}.thanks strong{color:#3b2f13}.timeline{display:grid;gap:14px}.row{display:grid;grid-template-columns:120px 1fr;gap:14px;align-items:start}.year{font-weight:900;color:#3443b6}.footer{text-align:center;color:var(--muted);font-size:14px;margin-top:28px}@media(max-width:800px){.grid,.row{grid-template-columns:1fr}.nav{border-radius:22px;align-items:flex-start;flex-direction:column}.links{gap:8px}}
+  </style>
+</head>
+<body>
+  <main class="page">
+    <nav class="nav">
+      <a href="./">研究パズル Web デモ</a>
+      <div class="links">
+        <a href="./">デモ</a>
+        <a href="#bachelor">卒論</a>
+        <a href="#master">修論</a>
+        <a href="#methods">技術</a>
+        <a href="#thanks">謝辞</a>
+      </div>
+    </nav>
+
+    <section class="hero">
+      <span class="eyebrow">Research Story</span>
+      <h1>パズルと絵画を、<br>同じ駒でつなぐ研究。</h1>
+      <p class="lead">このページは、上田元輝の卒業研究・修士研究を、Webデモと一緒に読めるように整理した研究紹介ページです。実装を触る前後に、何を目指していた研究なのかを確認できます。</p>
+      <div class="quote">「絵を見に行く」のではなく、パズルを解くことで絵が自分に近づいてくる感覚を作りたい。</div>
+    </section>
+
+    <section class="panel" id="bachelor">
+      <h2>卒論：2画像からの合成駒を用いたスライディングブロックパズル</h2>
+      <p>出発点は、パズルを解くことと絵画鑑賞という二つの趣味でした。1枚の絵を分割して並べ替えるだけではなく、スライディングブロックパズルを解く過程で、別の絵へ変化していく表現を目指しました。</p>
+      <div class="grid">
+        <div class="card"><h3>目的</h3><p>2枚の画像から合成駒を作り、一方の絵からもう一方の絵へ変化して見えるスライディングブロックパズルを生成する。</p></div>
+        <div class="card"><h3>ポイント</h3><p>単に完成画像を入れ替えるのではなく、各駒に両方の画像の要素を入れることで、変化前後の再現度の差を小さくする。</p></div>
+        <div class="card"><h3>パズル側</h3><p>N²−1パズルとして、パリティ判定、空白マスの移動、外側から揃える自動解法を扱った。</p></div>
+        <div class="card"><h3>実装側</h3><p>Processingで画像分割、合成駒生成、スライドパズル描画、解法アニメーションを作成した。</p></div>
+      </div>
+      <div class="badges"><span class="badge">2 images</span><span class="badge">15 puzzle</span><span class="badge">parity</span><span class="badge">Uegen's Greedy</span></div>
+    </section>
+
+    <section class="panel" id="master">
+      <h2>修論：複数画像による合成駒と各画像の再構築</h2>
+      <p>修士研究では、2枚だけではなく3枚以上の画像を同じ駒集合で表現する方向へ拡張しました。各画像のセルをどのように組み合わせれば、全ての画像をなるべく公平に再構築できるかが中心テーマです。</p>
+      <div class="grid">
+        <div class="card"><h3>入力</h3><p>N枚の画像を同じサイズに揃え、格子状に分割する。研究では30×30分割を中心に扱った。</p></div>
+        <div class="card"><h3>合成駒</h3><p>各画像から1セルずつ選び、それらを平均して1つの合成駒を作る。合成駒の集合を並べ替えて、各元画像を再構築する。</p></div>
+        <div class="card"><h3>目的関数</h3><p>選ばれたセル群から合成駒を作り、合成駒から各元セルへの差分二乗和を小さくする。</p></div>
+        <div class="card"><h3>探索</h3><p>ハンガリー法による再割り当てと、UIサーチによる局所探索で、より良い組合せを探す。</p></div>
+      </div>
+      <div class="badges"><span class="badge">multiple images</span><span class="badge">synthetic pieces</span><span class="badge">assignment problem</span><span class="badge">UI Search</span><span class="badge">block model</span></div>
+    </section>
+
+    <section class="panel" id="methods">
+      <h2>技術要素</h2>
+      <div class="timeline">
+        <div class="row"><div class="year">合成駒</div><div>複数の画像から選ばれたセルを平均して作る駒。1つの駒が複数画像の情報を少しずつ持つ。</div></div>
+        <div class="row"><div class="year">重心モデル</div><div>選ばれたセル群の平均、つまり合成駒を重心として考え、各セルからその合成駒への距離をコストにする。</div></div>
+        <div class="row"><div class="year">ハンガリー法</div><div>ある画像だけを選び、他画像の対応を固定した上で、コストが小さくなるセル対応を求める。</div></div>
+        <div class="row"><div class="year">UIサーチ</div><div>1画像ずつ再割り当てを繰り返し、局所的にコストを下げていく探索。Webデモでは簡易版を実装中。</div></div>
+        <div class="row"><div class="year">ブロックモデル</div><div>単一セルだけでなく、周辺ブロック単位で評価することで、グラデーションや単色領域のムラを改善する考え方。</div></div>
+      </div>
+    </section>
+
+    <section class="panel thanks" id="thanks">
+      <h2>謝辞</h2>
+      <p>この研究は、指導教員、研究室の先輩・同期・後輩、画像提供に協力してくれた人たち、家族、そして最後まで諦めずに作り切った自分自身への感謝と一緒に残されています。</p>
+      <p><strong>ありがとう。</strong></p>
+      <p>研究デモでは、技術だけでなく、この研究を支えてくれた人たちの存在も見えるように、謝辞を独立したセクションとして残しています。</p>
+    </section>
+
+    <p class="footer">Generated for miiifa/mykenkyu — research story</p>
+  </main>
+</body>
+</html>
