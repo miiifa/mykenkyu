@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>正則化付き色重み探索ミニデモ</title>
+  <style>
+    :root{--bg:#f6f8fb;--text:#172033;--muted:#627083;--line:#dce3ec;--primary:#4f66f0;--soft:#eef2ff;--notice:#ecfbf9;--green:#12615d;--shadow:0 18px 44px rgba(23,32,51,.10)}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;line-height:1.7}
+    main{width:min(1080px,calc(100% - 32px));margin:auto;padding:24px 0 56px}
+    .nav,.card{background:rgba(255,255,255,.95);border:1px solid var(--line);border-radius:26px;box-shadow:var(--shadow)}
+    .nav{display:flex;justify-content:space-between;gap:12px;margin-bottom:18px;padding:12px 16px;border-radius:999px}
+    .nav a{font-weight:900;color:var(--text);text-decoration:none}
+    .card{padding:26px;margin:18px 0}
+    h1{font-size:clamp(32px,5vw,58px);line-height:1.12;letter-spacing:-.06em;margin:12px 0 18px}
+    h2{letter-spacing:-.03em;margin:0 0 12px}
+    p{color:var(--muted)}
+    button{border:0;border-radius:999px;padding:11px 16px;background:var(--text);color:white;font-weight:900;cursor:pointer}
+    button.blue{background:var(--primary)}
+    button.light{background:var(--soft);color:var(--text)}
+    label{display:block;font-weight:850;margin-bottom:7px}
+    input{width:100%;padding:10px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--text);font:inherit}
+    .toolbar{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;align-items:end}
+    .badge{display:inline-flex;padding:5px 10px;margin:3px;border-radius:999px;background:var(--soft);color:#3443b6;font-size:12px;font-weight:900}
+    .note{padding:15px 17px;border-radius:18px;border:1px solid #b7e1dc;background:var(--notice);color:var(--green);font-weight:850;margin:12px 0}
+    table{width:100%;border-collapse:collapse;background:#fff;border-radius:18px;overflow:hidden;border:1px solid var(--line);font-size:14px}
+    th,td{border-bottom:1px solid var(--line);padding:9px;text-align:right;vertical-align:top}
+    th:first-child,td:first-child{text-align:left}
+    th{background:#f2f5fb}
+    tr.best{background:#ecfbf9;color:var(--green);font-weight:900}
+    pre{overflow:auto;background:#101522;color:#d8e4ff;border-radius:18px;padding:16px;font-size:13px;line-height:1.6;max-height:260px}
+    @media(max-width:820px){main{width:calc(100% - 18px);padding-top:12px}.nav{border-radius:22px;flex-direction:column}.card{padding:18px;border-radius:22px}.toolbar{grid-template-columns:1fr 1fr}table{font-size:12px}}
+  </style>
+</head>
+<body>
+<main>
+  <nav class="nav"><a href="./">研究パズル Web デモ</a><div><a href="./weight-search.html">色重み探索</a> / <a href="./progress.html">進捗日記</a> / <a href="./regularized-weight-demo.html">J評価デモ</a></div></nav>
+
+  <section class="card">
+    <span class="badge">Regularized Objective</span><span class="badge">Alternating Optimization</span><span class="badge">λC Search</span>
+    <h1>正則化付きJ評価で、<br>λCを選ぶ。</h1>
+    <p>このページは、メインデモへ入れる前のミニ実装です。合成駒内部コスト P、見た目補助コスト B、色寄与率ペナルティ、λ正則化をまとめた J を計算し、どの λC が良いかを比較します。</p>
+    <div class="note">ここでは画像そのものではなく、3枚画像×セル群を模した特徴ベクトルで検証しています。目的は、λCが0に逃げない評価関数として動くかを確認することです。</div>
+  </section>
+
+  <section class="card">
+    <h2>設定</h2>
+    <div class="toolbar">
+      <label>セル数 V<input id="cellCount" type="number" min="12" max="180" value="48"></label>
+      <label>α: Pの重み<input id="alpha" type="number" step="0.05" min="0" max="1" value="0.70"></label>
+      <label>τ: 色寄与目標<input id="tau" type="number" step="0.05" min="0" max="0.8" value="0.25"></label>
+      <label>β: 寄与率罰則<input id="beta" type="number" step="0.1" min="0" max="20" value="4.0"></label>
+      <label>γ: λ正則化<input id="gamma" type="number" step="0.01" min="0" max="2" value="0.12"></label>
+    </div>
+    <p>
+      <button class="blue" id="runButton">J評価でλ探索</button>
+      <button class="light" id="resetButton">特徴を作り直す</button>
+    </p>
+  </section>
+
+  <section class="card">
+    <h2>結果</h2>
+    <div id="result"></div>
+  </section>
+
+  <section class="card">
+    <h2>ログ</h2>
+    <pre id="log"></pre>
+  </section>
+</main>
+
+<script>
+(() => {
+  'use strict';
+
+  const IMAGE_COUNT = 3;
+  const LAMBDA_CANDIDATES = [0.10, 0.15, 0.25, 0.35, 0.50, 0.65, 0.80];
+  const LAMBDA0 = 0.35;
+  const EPS = 1e-9;
+
+  const cellCountEl = document.getElementById('cellCount');
+  const alphaEl = document.getElementById('alpha');
+  const tauEl = document.getElementById('tau');
+  const betaEl = document.getElementById('beta');
+  const gammaEl = document.getElementById('gamma');
+  const resultEl = document.getElementById('result');
+  const logEl = document.getElementById('log');
+
+  let features = [];
+  let maps = [];
+
+  const id = n => Array.from({ length: n }, (_, i) => i);
+  const fmt = v => Number.isFinite(v) ? v.toFixed(4) : '-';
+
+  function log(line){
+    logEl.textContent = `${new Date().toLocaleTimeString()}  ${line}\n` + logEl.textContent;
+  }
+
+  function randomNormal(){
+    let u = 0, v = 0;
+    while(u === 0) u = Math.random();
+    while(v === 0) v = Math.random();
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  }
+
+  function makeFeature(base, imageIndex, cellIndex){
+    const phase = cellIndex / Math.max(1, Number(cellCountEl.value) - 1);
+    const y = base + 0.35 * Math.sin(phase * Math.PI * 2 + imageIndex * 0.55) + randomNormal() * 0.10;
+    const cb = 0.45 * Math.sin(phase * Math.PI * 3 + imageIndex * 0.9) + randomNormal() * 0.16;
+    const cr = 0.45 * Math.cos(phase * Math.PI * 2.2 + imageIndex * 1.2) + randomNormal() * 0.16;
+    const edge = Math.abs(Math.sin(phase * Math.PI * 5 + imageIndex * 0.3)) + randomNormal() * 0.08;
+    return { y, cb, cr, edge };
+  }
+
+  function resetFeatures(){
+    const n = Number(cellCountEl.value);
+    features = [];
+    for(let img = 0; img < IMAGE_COUNT; img++){
+      const imageFeatures = [];
+      for(let p = 0; p < n; p++){
+        imageFeatures.push(makeFeature(phaseBase(p, n), img, p));
+      }
+      features.push(imageFeatures);
+    }
+    maps = [id(n), shuffle(id(n)), shuffle(id(n))];
+    log(`特徴生成: ${IMAGE_COUNT}画像 × ${n}セル`);
+    runSearch();
+  }
+
+  function phaseBase(p, n){
+    const t = p / Math.max(1, n - 1);
+    return 0.5 + 0.35 * Math.sin(t * Math.PI * 2);
+  }
+
+  function shuffle(arr){
+    const next = arr.slice();
+    for(let i = next.length - 1; i > 0; i--){
+      const j = Math.floor(Math.random() * (i + 1));
+      [next[i], next[j]] = [next[j], next[i]];
+    }
+    return next;
+  }
+
+  function mean(vals){
+    return vals.reduce((a, b) => a + b, 0) / vals.length;
+  }
+
+  function variance(vals){
+    const m = mean(vals);
+    return vals.reduce((sum, v) => sum + (v - m) ** 2, 0) / vals.length;
+  }
+
+  function pieceCosts(mapSet){
+    const n = mapSet[0].length;
+    let py = 0;
+    let pcb = 0;
+    let pcr = 0;
+    let bedge = 0;
+    for(let slot = 0; slot < n; slot++){
+      const ys = [];
+      const cbs = [];
+      const crs = [];
+      const edges = [];
+      for(let img = 0; img < IMAGE_COUNT; img++){
+        const f = features[img][mapSet[img][slot]];
+        ys.push(f.y);
+        cbs.push(f.cb);
+        crs.push(f.cr);
+        edges.push(f.edge);
+      }
+      py += variance(ys);
+      pcb += variance(cbs);
+      pcr += variance(crs);
+      bedge += variance(edges);
+    }
+    return { py: py / n, pcb: pcb / n, pcr: pcr / n, b: bedge / n };
+  }
+
+  function objective(mapSet, lambda){
+    const alpha = Number(alphaEl.value);
+    const tau = Number(tauEl.value);
+    const beta = Number(betaEl.value);
+    const gamma = Number(gammaEl.value);
+    const c = pieceCosts(mapSet);
+    const colorRaw = c.pcb + c.pcr;
+    const p = c.py + lambda * colorRaw;
+    const s = lambda * colorRaw / (c.py + lambda * colorRaw + EPS);
+    const colorPenalty = (s - tau) ** 2;
+    const lambdaPenalty = (lambda - LAMBDA0) ** 2;
+    const j = alpha * p + (1 - alpha) * c.b + beta * colorPenalty + gamma * lambdaPenalty;
+    return { ...c, p, s, colorPenalty, lambdaPenalty, j };
+  }
+
+  function improveMapsForLambda(startMaps, lambda, rounds = 8){
+    const n = startMaps[0].length;
+    const mapSet = startMaps.map(m => m.slice());
+    let bestJ = objective(mapSet, lambda).j;
+    for(let round = 0; round < rounds; round++){
+      for(let img = 1; img < IMAGE_COUNT; img++){
+        let improved = true;
+        let guard = 0;
+        while(improved && guard < n){
+          improved = false;
+          guard += 1;
+          const a = Math.floor(Math.random() * n);
+          const b = Math.floor(Math.random() * n);
+          [mapSet[img][a], mapSet[img][b]] = [mapSet[img][b], mapSet[img][a]];
+          const j = objective(mapSet, lambda).j;
+          if(j + EPS < bestJ){
+            bestJ = j;
+            improved = true;
+          }else{
+            [mapSet[img][a], mapSet[img][b]] = [mapSet[img][b], mapSet[img][a]];
+          }
+        }
+      }
+    }
+    return mapSet;
+  }
+
+  function runSearch(){
+    if(!features.length) resetFeatures();
+    let best = null;
+    const rows = [];
+    for(const lambda of LAMBDA_CANDIDATES){
+      const improvedMaps = improveMapsForLambda(maps, lambda);
+      const metrics = objective(improvedMaps, lambda);
+      const row = { lambda, metrics, maps: improvedMaps };
+      rows.push(row);
+      if(!best || metrics.j < best.metrics.j) best = row;
+      log(`λ=${lambda.toFixed(2)} J=${fmt(metrics.j)} P=${fmt(metrics.p)} s=${fmt(metrics.s)}`);
+    }
+    maps = best.maps.map(m => m.slice());
+    renderRows(rows, best);
+    log(`採用: λ=${best.lambda.toFixed(2)} / J=${fmt(best.metrics.j)} / 色寄与 s=${fmt(best.metrics.s)}`);
+  }
+
+  function renderRows(rows, best){
+    const html = rows.map(row => {
+      const m = row.metrics;
+      return `<tr class="${row === best ? 'best' : ''}">
+        <td>λ=${row.lambda.toFixed(2)}</td>
+        <td>${fmt(m.j)}</td>
+        <td>${fmt(m.p)}</td>
+        <td>${fmt(m.py)}</td>
+        <td>${fmt(m.pcb + m.pcr)}</td>
+        <td>${fmt(m.b)}</td>
+        <td>${fmt(m.s)}</td>
+        <td>${fmt(m.colorPenalty)}</td>
+        <td>${fmt(m.lambdaPenalty)}</td>
+      </tr>`;
+    }).join('');
+    resultEl.innerHTML = `<table>
+      <thead><tr><th>候補</th><th>J</th><th>P</th><th>P_Y</th><th>P_C</th><th>B</th><th>s</th><th>(s-τ)^2</th><th>(λ-λ0)^2</th></tr></thead>
+      <tbody>${html}</tbody>
+    </table>
+    <p>緑の行が採用λです。Jは小さいほど良く、sは色寄与率です。τに近いほど色寄与率ペナルティが小さくなります。</p>`;
+  }
+
+  document.getElementById('runButton').addEventListener('click', runSearch);
+  document.getElementById('resetButton').addEventListener('click', resetFeatures);
+  [cellCountEl, alphaEl, tauEl, betaEl, gammaEl].forEach(el => el.addEventListener('change', runSearch));
+
+  resetFeatures();
+})();
+</script>
+</body>
+</html>
