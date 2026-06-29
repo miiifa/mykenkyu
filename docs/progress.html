@@ -52,7 +52,8 @@
         <tr><td>定式化見直し</td><td>λCが0に逃げないよう、正則化付きの同時最適化方針へ整理する。</td><td>完了</td></tr>
         <tr><td>J評価仕様</td><td>コード実装前に、Jの項・係数・表示値を固定する。</td><td>完了</td></tr>
         <tr><td>参考文献整理</td><td>見え方評価に使える論文を、B_color / B_structure / B_edge / B_boundary に整理する。</td><td>完了</td></tr>
-        <tr><td>B_color実装</td><td>Lab変換とΔE色差を、見た目補助コストへ入れる。</td><td>今回更新</td></tr>
+        <tr><td>B_color実装</td><td>Lab変換とΔE色差を、見た目補助コストへ入れる。</td><td>ミニデモ完了</td></tr>
+        <tr><td>実画像セル検証</td><td>実画像をセル分割し、Lab平均との差でB_colorを測る。</td><td>今回追加</td></tr>
         <tr><td>ブロックモデル</td><td>合成駒生成後の再配置・見た目補正を追加する。</td><td>次の本命</td></tr>
       </tbody>
     </table>
@@ -98,8 +99,12 @@
         <p>CIEDE2000、色知覚ベースの類似度、SSIM、GMSD、ΔE_NS、LPIPSを、B_color / B_structure / B_edge / B_boundary のどこに使うか整理した。</p>
       </li>
       <li class="item">
-        <h3><span class="tag">今回</span> B_color に Lab ΔE を導入</h3>
-        <p>J評価ミニデモの B に、sRGB → XYZ → CIELAB 変換と ΔE76 ベースの B_color を追加した。次はこれをメインデモの重み探索へ統合する。</p>
+        <h3><span class="tag">PR #18</span> B_color に Lab ΔE を導入</h3>
+        <p>J評価ミニデモの B に、sRGB → XYZ → CIELAB 変換と ΔE76 ベースの B_color を追加した。</p>
+      </li>
+      <li class="item">
+        <h3><span class="tag">今回</span> 実画像セルのB_color検証</h3>
+        <p>テンプレ画像またはアップロード画像をセル分割し、各セルのLab平均特徴から合成駒内の ΔE76 B_color を計算する検証ページを追加した。</p>
       </li>
     </ul>
   </section>
@@ -115,6 +120,7 @@
         <tr><td>リプレイが探索状態を直接変更すると、探索本体が壊れやすい。</td><td>previewDataで表示専用にする。</td></tr>
         <tr><td>デモ本体を触る前に、目的関数仕様を固定した方がよい。</td><td>J評価仕様ページを作り、次の実装対象を明確にする。</td></tr>
         <tr><td>YCbCrの色距離だけだと、人間の色知覚とはズレる可能性がある。</td><td>まずB_colorにLab ΔEを入れ、将来的にCIEDE2000へ発展させる。</td></tr>
+        <tr><td>メインデモに直接統合する前に、実画像セルで動くか確認した方が安全。</td><td>実画像セル用のB_color検証ページを追加した。</td></tr>
       </tbody>
     </table>
   </section>
@@ -122,9 +128,9 @@
   <section class="card">
     <h2>次にやること</h2>
     <ul>
+      <li>メインデモのセル特徴に Lab 平均を追加する。</li>
       <li>メインデモのλ探索を、単純な候補選択から正則化付きJ評価へ寄せる。</li>
-      <li>今回の Lab ΔE ベース B_color を、実画像セル特徴量へ統合する。</li>
-      <li>π固定でλCを近傍探索するステップを追加し、交互最適化にする。</li>
+      <li>今回の実画像セル B_color を、メインデモの重み探索結果テーブルへ統合する。</li>
       <li>見た目側の B_structure として、セル内4×4のSSIM風構造差を実装する。</li>
       <li>トップページから説明ページ・J評価仕様・参考文献・進捗日記への導線を追加する。</li>
     </ul>

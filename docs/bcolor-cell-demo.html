@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>実画像セルのB_colorデモ</title>
+  <style>
+    :root{--bg:#f6f8fb;--text:#172033;--muted:#627083;--line:#dce3ec;--primary:#4f66f0;--soft:#eef2ff;--notice:#ecfbf9;--green:#12615d;--shadow:0 18px 44px rgba(23,32,51,.10)}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;line-height:1.7}
+    main{width:min(1120px,calc(100% - 32px));margin:auto;padding:24px 0 56px}
+    .nav,.card{background:rgba(255,255,255,.95);border:1px solid var(--line);border-radius:26px;box-shadow:var(--shadow)}
+    .nav{display:flex;justify-content:space-between;gap:12px;margin-bottom:18px;padding:12px 16px;border-radius:999px}
+    .nav a{font-weight:900;color:var(--text);text-decoration:none}
+    .card{padding:26px;margin:18px 0}
+    h1{font-size:clamp(32px,5vw,58px);line-height:1.12;letter-spacing:-.06em;margin:12px 0 18px}
+    h2{letter-spacing:-.03em;margin:0 0 12px}
+    p{color:var(--muted)}
+    button{border:0;border-radius:999px;padding:11px 16px;background:var(--text);color:white;font-weight:900;cursor:pointer}
+    button.blue{background:var(--primary)}
+    button.light{background:var(--soft);color:var(--text)}
+    label{display:block;font-weight:850;margin-bottom:7px}
+    input,select{width:100%;padding:10px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--text);font:inherit}
+    .toolbar{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:end}
+    .uploads{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:14px}
+    .badge{display:inline-flex;padding:5px 10px;margin:3px;border-radius:999px;background:var(--soft);color:#3443b6;font-size:12px;font-weight:900}
+    .note{padding:15px 17px;border-radius:18px;border:1px solid #b7e1dc;background:var(--notice);color:var(--green);font-weight:850;margin:12px 0}
+    .viewer{display:grid;grid-template-columns:360px 1fr;gap:18px;align-items:start}
+    canvas{width:100%;height:auto;border-radius:18px;background:white;border:1px solid var(--line)}
+    table{width:100%;border-collapse:collapse;background:#fff;border-radius:18px;overflow:hidden;border:1px solid var(--line);font-size:13px}
+    th,td{border-bottom:1px solid var(--line);padding:8px;text-align:right;vertical-align:top}
+    th:first-child,td:first-child{text-align:left}
+    th{background:#f2f5fb}
+    pre{overflow:auto;background:#101522;color:#d8e4ff;border-radius:18px;padding:16px;font-size:13px;line-height:1.6;max-height:260px}
+    @media(max-width:860px){main{width:calc(100% - 18px);padding-top:12px}.nav{border-radius:22px;flex-direction:column}.card{padding:18px;border-radius:22px}.toolbar,.uploads,.viewer{grid-template-columns:1fr}table{font-size:11px}}
+  </style>
+</head>
+<body>
+<main>
+  <nav class="nav"><a href="./">研究パズル Web デモ</a><div><a href="./weight-search.html">色重み探索</a> / <a href="./literature.html">参考文献</a> / <a href="./progress.html">進捗日記</a></div></nav>
+
+  <section class="card">
+    <span class="badge">Image Cells</span><span class="badge">CIELAB</span><span class="badge">B_color</span>
+    <h1>実画像セルで、<br>B_colorを測る。</h1>
+    <p>メインデモへ統合する前に、実際の画像セルから Lab 平均特徴を取り、合成駒内の ΔE76 ベース B_color を計算する検証ページです。</p>
+    <div class="note">テンプレ画像でも、自分の画像でも試せます。画像はブラウザ内だけで処理され、サーバーには送信されません。</div>
+  </section>
+
+  <section class="card">
+    <h2>入力</h2>
+    <div class="toolbar">
+      <label>分割数
+        <select id="gridSelect"><option value="6">6×6</option><option value="8" selected>8×8</option><option value="10">10×10</option><option value="12">12×12</option></select>
+      </label>
+      <button class="blue" id="templateButton">テンプレ画像を生成</button>
+      <button id="randomButton">ランダム割当</button>
+      <button class="light" id="alignedButton">同位置割当</button>
+    </div>
+    <div class="uploads">
+      <label>画像1<input type="file" id="file0" accept="image/*"></label>
+      <label>画像2<input type="file" id="file1" accept="image/*"></label>
+      <label>画像3<input type="file" id="file2" accept="image/*"></label>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>結果</h2>
+    <div class="viewer">
+      <canvas id="canvas" width="360" height="360"></canvas>
+      <div id="result"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>ログ</h2>
+    <pre id="log"></pre>
+  </section>
+</main>
+
+<script>
+(() => {
+  'use strict';
+
+  const SIZE = 360;
+  const IMAGE_COUNT = 3;
+  const EPS = 1e-9;
+
+  const gridSelect = document.getElementById('gridSelect');
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const resultEl = document.getElementById('result');
+  const logEl = document.getElementById('log');
+
+  let sourceData = [];
+  let cells = [];
+  let maps = [];
+
+  const id = n => Array.from({ length: n }, (_, i) => i);
+  const fmt = v => Number.isFinite(v) ? v.toFixed(4) : '-';
+
+  function log(line){
+    logEl.textContent = `${new Date().toLocaleTimeString()}  ${line}\n` + logEl.textContent;
+  }
+
+  function srgbToLinear(v){
+    const x = v / 255;
+    return x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+  }
+
+  function rgbToXyz(r, g, b){
+    const rl = srgbToLinear(r);
+    const gl = srgbToLinear(g);
+    const bl = srgbToLinear(b);
+    return {
+      x: (0.4124564 * rl + 0.3575761 * gl + 0.1804375 * bl) * 100,
+      y: (0.2126729 * rl + 0.7151522 * gl + 0.0721750 * bl) * 100,
+      z: (0.0193339 * rl + 0.1191920 * gl + 0.9503041 * bl) * 100
+    };
+  }
+
+  function xyzToLab({ x, y, z }){
+    const ref = { x: 95.047, y: 100.000, z: 108.883 };
+    const delta = 6 / 29;
+    const f = t => t > delta ** 3 ? Math.cbrt(t) : t / (3 * delta ** 2) + 4 / 29;
+    const fx = f(x / ref.x);
+    const fy = f(y / ref.y);
+    const fz = f(z / ref.z);
+    return { l: 116 * fy - 16, a: 500 * (fx - fy), b: 200 * (fy - fz) };
+  }
+
+  function rgbToLab(r, g, b){
+    return xyzToLab(rgbToXyz(r, g, b));
+  }
+
+  function deltaE76(a, b){
+    return Math.sqrt((a.l - b.l) ** 2 + (a.a - b.a) ** 2 + (a.b - b.b) ** 2);
+  }
+
+  function mean(vals){
+    return vals.reduce((a, b) => a + b, 0) / vals.length;
+  }
+
+  function meanLab(labs){
+    return { l: mean(labs.map(v => v.l)), a: mean(labs.map(v => v.a)), b: mean(labs.map(v => v.b)) };
+  }
+
+  function shuffle(arr){
+    const next = arr.slice();
+    for(let i = next.length - 1; i > 0; i--){
+      const j = Math.floor(Math.random() * (i + 1));
+      [next[i], next[j]] = [next[j], next[i]];
+    }
+    return next;
+  }
+
+  function generateTemplates(){
+    sourceData = [];
+    for(let i = 0; i < IMAGE_COUNT; i++){
+      const off = document.createElement('canvas');
+      off.width = SIZE;
+      off.height = SIZE;
+      const c = off.getContext('2d');
+      const grad = c.createLinearGradient(0, 0, SIZE, SIZE);
+      const colors = [['#fff0d7', '#f06a6a'], ['#d9fff8', '#4967ff'], ['#f5ffe0', '#23b26d']][i];
+      grad.addColorStop(0, colors[0]);
+      grad.addColorStop(1, colors[1]);
+      c.fillStyle = grad;
+      c.fillRect(0, 0, SIZE, SIZE);
+      c.globalAlpha = 0.75;
+      for(let j = 0; j < 9; j++){
+        c.fillStyle = ['#ffffff', '#20263c', '#ffd447', '#ff6ad5', '#7cf7c9'][(j + i) % 5];
+        c.beginPath();
+        c.arc(55 + ((j * 83 + i * 39) % 250), 60 + ((j * 59 + i * 71) % 245), 18 + ((j * 13 + i * 11) % 42), 0, Math.PI * 2);
+        c.fill();
+      }
+      c.globalAlpha = 1;
+      c.font = '900 42px system-ui, sans-serif';
+      c.fillStyle = 'rgba(255,255,255,.7)';
+      c.fillText(`Image ${i + 1}`, 36, 322);
+      sourceData.push(c.getImageData(0, 0, SIZE, SIZE));
+    }
+    rebuild('テンプレ画像');
+  }
+
+  async function loadFile(index, file){
+    const bitmap = await createImageBitmap(file);
+    const off = document.createElement('canvas');
+    off.width = SIZE;
+    off.height = SIZE;
+    const c = off.getContext('2d');
+    c.fillStyle = '#fff';
+    c.fillRect(0, 0, SIZE, SIZE);
+    const scale = Math.max(SIZE / bitmap.width, SIZE / bitmap.height);
+    const w = bitmap.width * scale;
+    const h = bitmap.height * scale;
+    c.drawImage(bitmap, (SIZE - w) / 2, (SIZE - h) / 2, w, h);
+    sourceData[index] = c.getImageData(0, 0, SIZE, SIZE);
+    if(sourceData.filter(Boolean).length === IMAGE_COUNT) rebuild(`画像${index + 1}読込`);
+  }
+
+  function rebuild(reason){
+    const grid = Number(gridSelect.value);
+    cells = sourceData.map(data => splitImage(data, grid));
+    maps = [id(grid * grid), id(grid * grid), id(grid * grid)];
+    log(`${reason}: ${grid}×${grid}セルへ分割`);
+    renderSynthetic();
+    renderResult('同位置割当');
+  }
+
+  function splitImage(imageData, grid){
+    const cellSize = SIZE / grid;
+    const result = [];
+    for(let cy = 0; cy < grid; cy++){
+      for(let cx = 0; cx < grid; cx++){
+        const labs = [];
+        const rgba = new Uint8ClampedArray(cellSize * cellSize * 4);
+        for(let y = 0; y < cellSize; y++){
+          for(let x = 0; x < cellSize; x++){
+            const sx = cx * cellSize + x;
+            const sy = cy * cellSize + y;
+            const si = (sy * SIZE + sx) * 4;
+            const di = (y * cellSize + x) * 4;
+            const r = imageData.data[si];
+            const g = imageData.data[si + 1];
+            const b = imageData.data[si + 2];
+            rgba[di] = r;
+            rgba[di + 1] = g;
+            rgba[di + 2] = b;
+            rgba[di + 3] = 255;
+            labs.push(rgbToLab(r, g, b));
+          }
+        }
+        result.push({ rgba, lab: meanLab(labs) });
+      }
+    }
+    return result;
+  }
+
+  function bColor(mapSet){
+    const n = mapSet[0].length;
+    let sum = 0;
+    let maxSlot = { slot: 0, value: -Infinity };
+    for(let slot = 0; slot < n; slot++){
+      const labs = [];
+      for(let img = 0; img < IMAGE_COUNT; img++) labs.push(cells[img][mapSet[img][slot]].lab);
+      const labMean = meanLab(labs);
+      const value = mean(labs.map(lab => (deltaE76(lab, labMean) ** 2) / 10000));
+      sum += value;
+      if(value > maxSlot.value) maxSlot = { slot, value };
+    }
+    return { mean: sum / n, maxSlot };
+  }
+
+  function renderSynthetic(){
+    const grid = Number(gridSelect.value);
+    const cellSize = SIZE / grid;
+    const out = ctx.createImageData(SIZE, SIZE);
+    for(let slot = 0; slot < grid * grid; slot++){
+      const dx0 = (slot % grid) * cellSize;
+      const dy0 = Math.floor(slot / grid) * cellSize;
+      const merged = mergeCells([0, 1, 2].map(img => cells[img][maps[img][slot]]));
+      for(let y = 0; y < cellSize; y++){
+        for(let x = 0; x < cellSize; x++){
+          const si = (y * cellSize + x) * 4;
+          const di = ((dy0 + y) * SIZE + (dx0 + x)) * 4;
+          out.data[di] = merged[si];
+          out.data[di + 1] = merged[si + 1];
+          out.data[di + 2] = merged[si + 2];
+          out.data[di + 3] = 255;
+        }
+      }
+    }
+    ctx.putImageData(out, 0, 0);
+  }
+
+  function mergeCells(cellList){
+    const len = cellList[0].rgba.length;
+    const out = new Uint8ClampedArray(len);
+    for(let i = 0; i < len; i += 4){
+      let r = 0, g = 0, b = 0;
+      for(const cell of cellList){
+        r += cell.rgba[i];
+        g += cell.rgba[i + 1];
+        b += cell.rgba[i + 2];
+      }
+      out[i] = Math.round(r / cellList.length);
+      out[i + 1] = Math.round(g / cellList.length);
+      out[i + 2] = Math.round(b / cellList.length);
+      out[i + 3] = 255;
+    }
+    return out;
+  }
+
+  function renderResult(label){
+    const score = bColor(maps);
+    resultEl.innerHTML = `<table>
+      <thead><tr><th>項目</th><th>値</th></tr></thead>
+      <tbody>
+        <tr><td>割当</td><td>${label}</td></tr>
+        <tr><td>B_color mean</td><td>${fmt(score.mean)}</td></tr>
+        <tr><td>最大差スロット</td><td>${score.maxSlot.slot}</td></tr>
+        <tr><td>最大スロット値</td><td>${fmt(score.maxSlot.value)}</td></tr>
+      </tbody>
+    </table>
+    <p>B_color は、各合成駒スロット内で3画像のセルLab平均との差を ΔE76² / 10000 として平均した値です。小さいほど、色知覚上近いセル同士で合成駒が作られています。</p>`;
+    log(`${label}: B_color=${fmt(score.mean)} maxSlot=${score.maxSlot.slot}`);
+  }
+
+  function randomMaps(){
+    const n = Number(gridSelect.value) ** 2;
+    maps = [id(n), shuffle(id(n)), shuffle(id(n))];
+    renderSynthetic();
+    renderResult('ランダム割当');
+  }
+
+  function alignedMaps(){
+    const n = Number(gridSelect.value) ** 2;
+    maps = [id(n), id(n), id(n)];
+    renderSynthetic();
+    renderResult('同位置割当');
+  }
+
+  document.getElementById('templateButton').addEventListener('click', generateTemplates);
+  document.getElementById('randomButton').addEventListener('click', randomMaps);
+  document.getElementById('alignedButton').addEventListener('click', alignedMaps);
+  gridSelect.addEventListener('change', () => sourceData.length === IMAGE_COUNT && rebuild('分割変更'));
+  for(let i = 0; i < IMAGE_COUNT; i++){
+    document.getElementById(`file${i}`).addEventListener('change', event => {
+      const file = event.target.files && event.target.files[0];
+      if(file) loadFile(i, file).catch(error => log(`画像読込エラー: ${error.message}`));
+    });
+  }
+
+  generateTemplates();
+})();
+</script>
+</body>
+</html>
