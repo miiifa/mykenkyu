@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>参考文献メモ</title>
+  <style>
+    :root{--bg:#f6f8fb;--text:#172033;--muted:#627083;--line:#dce3ec;--primary:#4f66f0;--soft:#eef2ff;--notice:#ecfbf9;--green:#12615d;--shadow:0 18px 44px rgba(23,32,51,.10)}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;line-height:1.75}
+    main{width:min(1060px,calc(100% - 32px));margin:auto;padding:24px 0 56px}
+    .nav,.card{background:rgba(255,255,255,.95);border:1px solid var(--line);border-radius:26px;box-shadow:var(--shadow)}
+    .nav{display:flex;justify-content:space-between;gap:12px;margin-bottom:18px;padding:12px 16px;border-radius:999px}
+    .nav a{font-weight:900;color:var(--text);text-decoration:none}
+    .card{padding:26px;margin:18px 0}
+    h1{font-size:clamp(32px,5vw,58px);line-height:1.12;letter-spacing:-.06em;margin:12px 0 18px}
+    h2{letter-spacing:-.03em;margin:0 0 12px}
+    h3{margin:0 0 8px}
+    p{color:var(--muted)}
+    a{color:#3443b6;font-weight:850}
+    .badge{display:inline-flex;padding:5px 10px;margin:3px;border-radius:999px;background:var(--soft);color:#3443b6;font-size:12px;font-weight:900}
+    .note{padding:15px 17px;border-radius:18px;border:1px solid #b7e1dc;background:var(--notice);color:var(--green);font-weight:850;margin:12px 0}
+    table{width:100%;border-collapse:collapse;background:#fff;border-radius:18px;overflow:hidden;border:1px solid var(--line);font-size:14px}
+    th,td{border-bottom:1px solid var(--line);padding:10px;text-align:left;vertical-align:top}
+    th{background:#f2f5fb}
+    .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+    .paper{padding:16px;border:1px solid var(--line);border-radius:18px;background:#fff}
+    .paper small{display:block;color:var(--muted);font-weight:800;margin-top:4px}
+    pre{overflow:auto;background:#101522;color:#d8e4ff;border-radius:18px;padding:16px;font-size:13px;line-height:1.6}
+    @media(max-width:760px){main{width:calc(100% - 18px);padding-top:12px}.nav{border-radius:22px;flex-direction:column}.card{padding:18px;border-radius:22px}.grid{grid-template-columns:1fr}table{font-size:12px}}
+  </style>
+</head>
+<body>
+<main>
+  <nav class="nav"><a href="./">研究パズル Web デモ</a><div><a href="./weight-search.html">色重み探索</a> / <a href="./progress.html">進捗日記</a> / <a href="./literature.html">参考文献</a></div></nav>
+
+  <section class="card">
+    <span class="badge">Perceptual Metrics</span><span class="badge">Color Difference</span><span class="badge">Image Quality</span>
+    <h1>見え方評価に使う<br>参考文献メモ</h1>
+    <p>UIサーチで作った合成駒を、人間の見え方に近い基準で評価するための文献メモです。すべてをそのまま実装するのではなく、ブラウザ上で軽く動く形に落とし込めるものから採用します。</p>
+    <div class="note">採用方針: まずは CIELAB / CIEDE2000 風の色差、ブロックSSIM風の構造差、GMSD風の勾配差、隣接セル境界の色差を B_hat に入れる。LPIPSなど深層特徴は将来候補として扱う。</div>
+  </section>
+
+  <section class="card">
+    <h2>目的関数への対応</h2>
+    <pre><code>J(π, λC)
+= α P_hat(π, λC)
++ (1 - α) B_hat(π)
++ β (s(π, λC) - τ)^2
++ γ (λC - λ0)^2
+
+B_hat(π)
+= η1 B_color
++ η2 B_structure
++ η3 B_edge
++ η4 B_boundary</code></pre>
+    <p>B_hat は「合成駒として似ているか」ではなく、「絵として見たとき自然か」を補助する項です。P_hat と同じ特徴だけを使うと二重評価になるため、色知覚・構造・勾配・境界の別観点を入れます。</p>
+  </section>
+
+  <section class="card">
+    <h2>文献と使いどころ</h2>
+    <table>
+      <thead><tr><th>項</th><th>候補文献</th><th>使い方</th><th>優先度</th></tr></thead>
+      <tbody>
+        <tr><td>B_color</td><td>CIEDE2000 / Sharma, Wu, Dalal</td><td>RGBやYCbCr距離ではなく、Lab系の知覚色差へ寄せる。</td><td>最優先</td></tr>
+        <tr><td>B_color</td><td>人間の色知覚に基づく色類似度の研究</td><td>色差が大きい場合に、単純なLab距離が人間の感覚とズレる注意点として使う。</td><td>高</td></tr>
+        <tr><td>B_structure</td><td>SSIM</td><td>セル内4×4特徴に対して、平均・分散・共分散を見る軽量SSIM風スコアにする。</td><td>高</td></tr>
+        <tr><td>B_edge</td><td>GMSD</td><td>勾配強度の類似度を使って、輪郭や境界が崩れる組み合わせを避ける。</td><td>高</td></tr>
+        <tr><td>B_boundary</td><td>ΔE_NS</td><td>セル同士が隣り合って見える問題なので、隣接色差の考え方を境界コストへ使う。</td><td>中</td></tr>
+        <tr><td>将来評価</td><td>LPIPS</td><td>深層特徴による知覚類似度。ブラウザ実装は重いので、将来の比較指標として扱う。</td><td>低</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>主要文献メモ</h2>
+    <div class="grid">
+      <div class="paper">
+        <h3>CIEDE2000 color-difference formula</h3>
+        <p>CIELABの知覚均一性の弱点を補正する色差式。明度・彩度・色相の補正、青領域の回転補正などを含む。まず B_color の実装候補にする。</p>
+        <small>G. Sharma, W. Wu, E. N. Dalal, Color Research & Application, 2005.</small>
+      </div>
+      <div class="paper">
+        <h3>人間の色知覚に基づく色類似度</h3>
+        <p>人が似ていると感じる色範囲を実験し、既存のCIELAB色差が大きい色差領域で感覚と合わない可能性を扱う。貼ってもらったCiNii論文。</p>
+        <small>CiNii Research CRID: 1571135652841893504</small>
+      </div>
+      <div class="paper">
+        <h3>SSIM</h3>
+        <p>MSEではなく、輝度・コントラスト・構造の類似度を見る画像品質評価。今回はセル内ブロック特徴に対するSSIM風スコアに簡略化して使う。</p>
+        <small>Z. Wang, A. C. Bovik, H. R. Sheikh, E. P. Simoncelli, IEEE TIP, 2004.</small>
+      </div>
+      <div class="paper">
+        <h3>GMSD</h3>
+        <p>勾配強度の類似度と、その局所品質マップのばらつきを使う高速な知覚品質指標。輪郭・エッジの崩れを評価する B_edge に使う。</p>
+        <small>W. Xue, L. Zhang, X. Mou, A. C. Bovik, 2013/2014.</small>
+      </div>
+      <div class="paper">
+        <h3>ΔE_NS</h3>
+        <p>隣接して印刷された色ペアのように、境界なしで接する色差を扱う式。パズルセルの隣接境界評価 B_boundary に相性がよい。</p>
+        <small>F. Mirjalili, M. R. Luo, G. Cui, J. Morovic, 2019.</small>
+      </div>
+      <div class="paper">
+        <h3>LPIPS</h3>
+        <p>深層特徴が人間の知覚類似度とよく対応することを示した指標。今のブラウザデモには重いが、将来的な評価基準として残す。</p>
+        <small>R. Zhang, P. Isola, A. A. Efros, E. Shechtman, O. Wang, CVPR 2018.</small>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>実装優先順位</h2>
+    <table>
+      <thead><tr><th>順番</th><th>内容</th><th>理由</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Lab変換 + ΔE76 または簡易ΔE00</td><td>色知覚ベースの第一歩。比較的軽くブラウザ実装できる。</td></tr>
+        <tr><td>2</td><td>セル内4×4のSSIM風構造差</td><td>明暗平均だけでなく、セル内の構造を評価できる。</td></tr>
+        <tr><td>3</td><td>Sobel風の勾配特徴</td><td>輪郭が崩れる配置を避けられる。</td></tr>
+        <tr><td>4</td><td>隣接境界コスト</td><td>最終的な再構築画像の自然さに効く。</td></tr>
+        <tr><td>5</td><td>LPIPSなど深層特徴</td><td>研究比較としては有用だが、今のWebデモには重い。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>参考リンク</h2>
+    <ul>
+      <li><a href="https://cir.nii.ac.jp/crid/1571135652841893504">人間の色知覚特性に基づいた色の類似度</a></li>
+      <li><a href="https://en.wikipedia.org/wiki/Color_difference">Color difference / CIEDE2000 概要</a></li>
+      <li><a href="https://arxiv.org/abs/1308.3052">GMSD: Gradient Magnitude Similarity Deviation</a></li>
+      <li><a href="https://arxiv.org/abs/1904.11293">ΔE_NS: no-separation color difference</a></li>
+      <li><a href="https://arxiv.org/abs/1801.03924">LPIPS: deep features as a perceptual metric</a></li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>
