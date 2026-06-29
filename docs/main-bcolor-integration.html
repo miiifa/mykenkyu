@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>メインデモへのB_color統合仕様</title>
+  <style>
+    :root{--bg:#f6f8fb;--text:#172033;--muted:#627083;--line:#dce3ec;--primary:#4f66f0;--soft:#eef2ff;--notice:#ecfbf9;--warn:#fff6e5;--green:#12615d;--orange:#895400;--shadow:0 18px 44px rgba(23,32,51,.10)}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;line-height:1.75}
+    main{width:min(980px,calc(100% - 32px));margin:auto;padding:24px 0 56px}
+    .nav,.card{background:rgba(255,255,255,.95);border:1px solid var(--line);border-radius:26px;box-shadow:var(--shadow)}
+    .nav{display:flex;justify-content:space-between;gap:12px;margin-bottom:18px;padding:12px 16px;border-radius:999px}
+    .nav a{font-weight:900;color:var(--text);text-decoration:none}
+    .card{padding:26px;margin:18px 0}
+    h1{font-size:clamp(32px,5vw,58px);line-height:1.12;letter-spacing:-.06em;margin:12px 0 18px}
+    h2{letter-spacing:-.03em;margin:0 0 12px}
+    p{color:var(--muted)}
+    .badge{display:inline-flex;padding:5px 10px;margin:3px;border-radius:999px;background:var(--soft);color:#3443b6;font-size:12px;font-weight:900}
+    .note,.warn{padding:15px 17px;border-radius:18px;font-weight:850;margin:12px 0}
+    .note{border:1px solid #b7e1dc;background:var(--notice);color:var(--green)}
+    .warn{border:1px solid #efd19b;background:var(--warn);color:var(--orange)}
+    table{width:100%;border-collapse:collapse;background:#fff;border-radius:18px;overflow:hidden;border:1px solid var(--line);font-size:14px}
+    th,td{border-bottom:1px solid var(--line);padding:10px;text-align:left;vertical-align:top}
+    th{background:#f2f5fb}
+    pre{overflow:auto;background:#101522;color:#d8e4ff;border-radius:18px;padding:16px;font-size:13px;line-height:1.6}
+    @media(max-width:760px){main{width:calc(100% - 18px);padding-top:12px}.nav{border-radius:22px;flex-direction:column}.card{padding:18px;border-radius:22px}table{font-size:12px}}
+  </style>
+</head>
+<body>
+<main>
+  <nav class="nav"><a href="./">研究パズル Web デモ</a><div><a href="./weight-search.html">色重み探索</a> / <a href="./bcolor-cell-demo.html">B_color検証</a> / <a href="./progress.html">進捗日記</a></div></nav>
+
+  <section class="card">
+    <span class="badge">Main Demo Integration</span><span class="badge">B_color</span><span class="badge">J objective</span>
+    <h1>メインデモへ、<br>B_colorを安全に統合する。</h1>
+    <p>PR #19で実画像セルから Lab ΔE ベースの B_color を計算できることを確認した。次はメインデモの docs/index.html にこの評価を統合する。ただし index.html は大きく壊れやすいため、まず差し込み関数と表示項目を固定する。</p>
+    <div class="note">この仕様ページは、次の実装PRで index.html を触るためのチェックリストです。目的は、全面置換ではなく関数単位で安全に差し込むことです。</div>
+  </section>
+
+  <section class="card">
+    <h2>1. 追加する特徴量</h2>
+    <p>現在のセル特徴は Y, Cb, Cr を持っている。ここに Lab 平均を追加する。</p>
+    <pre><code>cell.feature = {
+  y: [...],
+  cb: [...],
+  cr: [...],
+  lab: { l, a, b }
+}</code></pre>
+    <p>Labはセル全画素の平均ではなく、各画素をLabへ変換してから平均する。</p>
+  </section>
+
+  <section class="card">
+    <h2>2. 追加する関数</h2>
+    <table>
+      <thead><tr><th>関数</th><th>役割</th><th>差し込み先</th></tr></thead>
+      <tbody>
+        <tr><td>srgbToLinear</td><td>sRGBを線形RGBへ変換する。</td><td>rgbToYCbCr の近く</td></tr>
+        <tr><td>rgbToXyz</td><td>線形RGBからD65 XYZへ変換する。</td><td>色変換群</td></tr>
+        <tr><td>xyzToLab</td><td>XYZからCIELABへ変換する。</td><td>色変換群</td></tr>
+        <tr><td>rgbToLab</td><td>RGBからLabへ変換する。</td><td>splitImageIntoCells 内で使用</td></tr>
+        <tr><td>deltaE76</td><td>Lab間の色差を計算する。</td><td>B_color 計算で使用</td></tr>
+        <tr><td>meanLab</td><td>複数Labの平均を返す。</td><td>B_color 計算で使用</td></tr>
+        <tr><td>bColorCost</td><td>mapSet全体のB_color平均を計算する。</td><td>runWeightSearch の評価値</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>3. B_color の定義</h2>
+    <pre><code>B_color(π)
+= mean_k mean_i { ΔE76(Lab_i,k, meanLab_k)^2 / 10000 }</code></pre>
+    <p>k は合成駒スロット、i は画像番号。小さいほど、同じ合成駒に入るセル同士が色知覚上近い。</p>
+  </section>
+
+  <section class="card">
+    <h2>4. J評価への入れ方</h2>
+    <pre><code>B(π) = η1 B_color(π) + η2 B_edge(π)
+
+J(π, λC)
+= α P(π, λC)
++ (1 - α) B(π)
++ β(s(π, λC)-τ)^2
++ γ(λC-λ0)^2</code></pre>
+    <p>最初は B_edge を既存の簡易値または0として扱い、B_color を先に統合する。SSIM風構造差やGMSD風エッジ差は次段階にする。</p>
+    <div class="warn">B_color を入れても、UIサーチ本体の割当コスト P を急に置き換えない。まずは λ候補の採用基準と表示値に J / B_color を入れる。</div>
+  </section>
+
+  <section class="card">
+    <h2>5. 表示する値</h2>
+    <table>
+      <thead><tr><th>表示名</th><th>意味</th></tr></thead>
+      <tbody>
+        <tr><td>J</td><td>正則化付き総合目的関数。採用判定に使う。</td></tr>
+        <tr><td>P</td><td>合成駒内部コスト。既存のUIサーチ目的。</td></tr>
+        <tr><td>B_color</td><td>Lab ΔEベースの色知覚コスト。</td></tr>
+        <tr><td>s</td><td>色寄与率。</td></tr>
+        <tr><td>(s-τ)^2</td><td>色寄与率ペナルティ。</td></tr>
+        <tr><td>(λ-λ0)^2</td><td>λ正則化ペナルティ。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>6. 実装順</h2>
+    <ol>
+      <li>index.html に RGB→Lab 関数群を追加する。</li>
+      <li>splitImageIntoCells で cell.feature.lab を保存する。</li>
+      <li>bColorCost(mapSet) を追加する。</li>
+      <li>objectiveJ(mapSet, lambda, pieceCost) を追加する。</li>
+      <li>runWeightSearch の row に J, B_color, s, penalties を追加する。</li>
+      <li>採用基準を score から J へ切り替える。</li>
+      <li>weightResults テーブルに J / B_color を表示する。</li>
+    </ol>
+  </section>
+</main>
+</body>
+</html>
