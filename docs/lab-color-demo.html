@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lab色差 B_color デモ</title>
+  <style>
+    :root{--bg:#f6f8fb;--text:#172033;--muted:#627083;--line:#dce3ec;--primary:#4f66f0;--soft:#eef2ff;--notice:#ecfbf9;--green:#12615d;--orange:#b87300;--shadow:0 18px 44px rgba(23,32,51,.10)}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;line-height:1.7}
+    main{width:min(1120px,calc(100% - 32px));margin:auto;padding:24px 0 56px}
+    .nav,.card{background:rgba(255,255,255,.95);border:1px solid var(--line);border-radius:26px;box-shadow:var(--shadow)}
+    .nav{display:flex;justify-content:space-between;gap:12px;margin-bottom:18px;padding:12px 16px;border-radius:999px}
+    .nav a{font-weight:900;color:var(--text);text-decoration:none}
+    .card{padding:26px;margin:18px 0}
+    h1{font-size:clamp(32px,5vw,58px);line-height:1.12;letter-spacing:-.06em;margin:12px 0 18px}
+    h2{letter-spacing:-.03em;margin:0 0 12px}
+    p{color:var(--muted)}
+    button{border:0;border-radius:999px;padding:11px 16px;background:var(--text);color:white;font-weight:900;cursor:pointer}
+    button.blue{background:var(--primary)} button.green{background:var(--green)} button.light{background:var(--soft);color:var(--text)}
+    label{display:block;font-weight:850;margin-bottom:7px}
+    input,select{width:100%;padding:10px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--text);font:inherit}
+    .toolbar,.uploads{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:end}
+    .uploads{grid-template-columns:repeat(3,minmax(0,1fr));margin-top:14px}
+    .badge{display:inline-flex;padding:5px 10px;margin:3px;border-radius:999px;background:var(--soft);color:#3443b6;font-size:12px;font-weight:900}
+    .note{padding:15px 17px;border-radius:18px;border:1px solid #b7e1dc;background:var(--notice);color:var(--green);font-weight:850;margin:12px 0}
+    table{width:100%;border-collapse:collapse;background:#fff;border-radius:18px;overflow:hidden;border:1px solid var(--line);font-size:14px}
+    th,td{border-bottom:1px solid var(--line);padding:9px;text-align:right;vertical-align:top}
+    th:first-child,td:first-child{text-align:left}
+    th{background:#f2f5fb}
+    tr.best{background:#ecfbf9;color:var(--green);font-weight:900}
+    .viewer{display:grid;grid-template-columns:minmax(280px,520px) minmax(300px,1fr);gap:18px;align-items:start}
+    canvas{display:block;width:100%;height:auto;background:#fff;border:1px solid var(--line);border-radius:22px}
+    pre{overflow:auto;background:#101522;color:#d8e4ff;border-radius:18px;padding:16px;font-size:13px;line-height:1.6;max-height:260px}
+    @media(max-width:840px){main{width:calc(100% - 18px);padding-top:12px}.nav{border-radius:22px;flex-direction:column}.card{padding:18px;border-radius:22px}.toolbar,.uploads,.viewer{grid-template-columns:1fr}table{font-size:12px}}
+  </style>
+</head>
+<body>
+<main>
+  <nav class="nav"><a href="./">研究パズル Web デモ</a><div><a href="./literature.html">参考文献</a> / <a href="./weight-search.html">色重み探索</a> / <a href="./progress.html">進捗日記</a></div></nav>
+
+  <section class="card">
+    <span class="badge">B_color</span><span class="badge">CIELAB</span><span class="badge">Delta E 76</span>
+    <h1>Lab色差で、<br>B_colorを測る。</h1>
+    <p>見え方評価 B_hat のうち、色知覚寄りの項 B_color を試すページです。RGB平均だけではなく、RGB → XYZ → Lab に変換し、合成駒の平均色と元セル色の ΔE76 を測ります。</p>
+    <div class="note">これは CIEDE2000 完全実装の前段です。まずは軽量な ΔE76 で、B_color を J 評価に入れたときの挙動を確認します。</div>
+  </section>
+
+  <section class="card">
+    <h2>入力と設定</h2>
+    <div class="toolbar">
+      <label>分割数
+        <select id="gridSelect"><option value="6">6×6</option><option value="8" selected>8×8</option><option value="10">10×10</option><option value="12">12×12</option></select>
+      </label>
+      <label>α: Pの重み<input id="alpha" type="number" min="0" max="1" step="0.05" value="0.70"></label>
+      <label>τ: 色寄与目標<input id="tau" type="number" min="0" max="0.8" step="0.05" value="0.25"></label>
+      <label>β: 寄与率罰則<input id="beta" type="number" min="0" max="20" step="0.1" value="4.0"></label>
+    </div>
+    <div class="uploads">
+      <label>画像1<input type="file" id="file0" accept="image/*"></label>
+      <label>画像2<input type="file" id="file1" accept="image/*"></label>
+      <label>画像3<input type="file" id="file2" accept="image/*"></label>
+    </div>
+    <p>
+      <button class="blue" id="templateButton">テンプレ画像</button>
+      <button class="green" id="runButton">Lab B_color でλ評価</button>
+      <button class="light" id="shuffleButton">割り当てをシャッフル</button>
+    </p>
+  </section>
+
+  <section class="card">
+    <div class="viewer">
+      <canvas id="canvas" width="600" height="600"></canvas>
+      <div>
+        <h2>λ候補の評価</h2>
+        <div id="result"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>ログ</h2>
+    <pre id="log"></pre>
+  </section>
+</main>
+
+<script>
+(() => {
+  'use strict';
+
+  const SIZE = 600;
+  const IMAGE_COUNT = 3;
+  const LAMBDA_CANDIDATES = [0.10, 0.15, 0.25, 0.35, 0.50, 0.65, 0.80];
+  const LAMBDA0 = 0.35;
+  const GAMMA = 0.12;
+  const EPS = 1e-9;
+
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const gridSelect = document.getElementById('gridSelect');
+  const alphaEl = document.getElementById('alpha');
+  const tauEl = document.getElementById('tau');
+  const betaEl = document.getElementById('beta');
+  const resultEl = document.getElementById('result');
+  const logEl = document.getElementById('log');
+
+  let sourceData = [];
+  let cells = [];
+  let maps = [];
+
+  const id = n => Array.from({ length: n }, (_, i) => i);
+  const fmt = v => Number.isFinite(v) ? v.toFixed(4) : '-';
+
+  function log(line){
+    logEl.textContent = `${new Date().toLocaleTimeString()}  ${line}\n` + logEl.textContent;
+  }
+
+  function shuffle(arr){
+    const next = arr.slice();
+    for(let i = next.length - 1; i > 0; i--){
+      const j = Math.floor(Math.random() * (i + 1));
+      [next[i], next[j]] = [next[j], next[i]];
+    }
+    return next;
+  }
+
+  function rgbToYCbCr(r, g, b){
+    return { y: 0.299 * r + 0.587 * g + 0.114 * b, cb: -0.168736 * r - 0.331264 * g + 0.5 * b + 128, cr: 0.5 * r - 0.418688 * g - 0.081312 * b + 128 };
+  }
+
+  function srgbToLinear(v){
+    v /= 255;
+    return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  }
+
+  function rgbToXyz(r, g, b){
+    const R = srgbToLinear(r);
+    const G = srgbToLinear(g);
+    const B = srgbToLinear(b);
+    return {
+      x: (0.4124564 * R + 0.3575761 * G + 0.1804375 * B) * 100,
+      y: (0.2126729 * R + 0.7151522 * G + 0.0721750 * B) * 100,
+      z: (0.0193339 * R + 0.1191920 * G + 0.9503041 * B) * 100
+    };
+  }
+
+  function xyzToLab(x, y, z){
+    const xr = x / 95.047;
+    const yr = y / 100.000;
+    const zr = z / 108.883;
+    const f = t => t > 0.008856 ? Math.cbrt(t) : (7.787 * t + 16 / 116);
+    const fx = f(xr);
+    const fy = f(yr);
+    const fz = f(zr);
+    return { l: 116 * fy - 16, a: 500 * (fx - fy), b: 200 * (fy - fz) };
+  }
+
+  function rgbToLab(r, g, b){
+    const xyz = rgbToXyz(r, g, b);
+    return xyzToLab(xyz.x, xyz.y, xyz.z);
+  }
+
+  function deltaE76(a, b){
+    return Math.sqrt((a.l - b.l) ** 2 + (a.a - b.a) ** 2 + (a.b - b.b) ** 2);
+  }
+
+  function generateTemplates(){
+    sourceData = [];
+    for(let i = 0; i < IMAGE_COUNT; i++){
+      const off = document.createElement('canvas');
+      off.width = SIZE;
+      off.height = SIZE;
+      const c = off.getContext('2d');
+      const gradient = c.createLinearGradient(0, 0, SIZE, SIZE);
+      const pairs = [['#fff0d7', '#f06a6a'], ['#d9fff8', '#4967ff'], ['#f5ffe0', '#23b26d']];
+      gradient.addColorStop(0, pairs[i][0]);
+      gradient.addColorStop(1, pairs[i][1]);
+      c.fillStyle = gradient;
+      c.fillRect(0, 0, SIZE, SIZE);
+      c.globalAlpha = 0.82;
+      for(let j = 0; j < 9; j++){
+        const x = 80 + ((j * 137 + i * 53) % 440);
+        const y = 90 + ((j * 89 + i * 97) % 420);
+        const r = 28 + ((j * 17 + i * 23) % 72);
+        c.fillStyle = ['#ffffff', '#20263c', '#ffd447', '#ff6ad5', '#7cf7c9'][(j + i) % 5];
+        c.beginPath();
+        if((j + i) % 2 === 0){ c.arc(x, y, r, 0, Math.PI * 2); c.fill(); }
+        else { c.save(); c.translate(x, y); c.rotate((j + i) * 0.33); c.fillRect(-r, -r * 0.55, r * 2, r * 1.1); c.restore(); }
+      }
+      sourceData.push(c.getImageData(0, 0, SIZE, SIZE));
+    }
+    afterImagesChanged('テンプレ画像を生成');
+  }
+
+  async function loadFile(index, file){
+    const bitmap = await createImageBitmap(file);
+    const off = document.createElement('canvas');
+    off.width = SIZE; off.height = SIZE;
+    const c = off.getContext('2d');
+    c.fillStyle = '#fff'; c.fillRect(0, 0, SIZE, SIZE);
+    const scale = Math.max(SIZE / bitmap.width, SIZE / bitmap.height);
+    const w = bitmap.width * scale;
+    const h = bitmap.height * scale;
+    c.drawImage(bitmap, (SIZE - w) / 2, (SIZE - h) / 2, w, h);
+    sourceData[index] = c.getImageData(0, 0, SIZE, SIZE);
+    if(sourceData.filter(Boolean).length === IMAGE_COUNT) afterImagesChanged(`画像${index + 1}を読込`);
+  }
+
+  function afterImagesChanged(message){
+    splitAll();
+    const n = Number(gridSelect.value) ** 2;
+    maps = [id(n), shuffle(id(n)), shuffle(id(n))];
+    log(message);
+    runEvaluation();
+  }
+
+  function splitAll(){
+    const grid = Number(gridSelect.value);
+    cells = sourceData.map(data => splitImage(data, grid));
+  }
+
+  function splitImage(imageData, grid){
+    const cellSize = SIZE / grid;
+    const out = [];
+    for(let cy = 0; cy < grid; cy++){
+      for(let cx = 0; cx < grid; cx++){
+        let r = 0, g = 0, b = 0, count = 0;
+        const rgba = new Uint8ClampedArray(cellSize * cellSize * 4);
+        for(let y = 0; y < cellSize; y++){
+          for(let x = 0; x < cellSize; x++){
+            const sx = cx * cellSize + x;
+            const sy = cy * cellSize + y;
+            const si = (sy * SIZE + sx) * 4;
+            const di = (y * cellSize + x) * 4;
+            const pr = imageData.data[si];
+            const pg = imageData.data[si + 1];
+            const pb = imageData.data[si + 2];
+            rgba[di] = pr; rgba[di + 1] = pg; rgba[di + 2] = pb; rgba[di + 3] = 255;
+            r += pr; g += pg; b += pb; count += 1;
+          }
+        }
+        r /= count; g /= count; b /= count;
+        out.push({ rgba, rgb: { r, g, b }, ycc: rgbToYCbCr(r, g, b), lab: rgbToLab(r, g, b) });
+      }
+    }
+    return out;
+  }
+
+  function variance(values){
+    const m = values.reduce((a, b) => a + b, 0) / values.length;
+    return values.reduce((sum, v) => sum + (v - m) ** 2, 0) / values.length;
+  }
+
+  function pieceMetrics(mapSet, lambda){
+    const n = mapSet[0].length;
+    let py = 0, pcb = 0, pcr = 0, bColor = 0;
+    for(let slot = 0; slot < n; slot++){
+      const ys = [], cbs = [], crs = [];
+      let sr = 0, sg = 0, sb = 0;
+      for(let img = 0; img < IMAGE_COUNT; img++){
+        const cell = cells[img][mapSet[img][slot]];
+        ys.push(cell.ycc.y); cbs.push(cell.ycc.cb); crs.push(cell.ycc.cr);
+        sr += cell.rgb.r; sg += cell.rgb.g; sb += cell.rgb.b;
+      }
+      py += variance(ys);
+      pcb += variance(cbs);
+      pcr += variance(crs);
+      const syntheticLab = rgbToLab(sr / IMAGE_COUNT, sg / IMAGE_COUNT, sb / IMAGE_COUNT);
+      for(let img = 0; img < IMAGE_COUNT; img++){
+        bColor += deltaE76(cells[img][mapSet[img][slot]].lab, syntheticLab);
+      }
+    }
+    py /= n; pcb /= n; pcr /= n;
+    bColor = bColor / (n * IMAGE_COUNT * 100);
+    const colorRaw = pcb + pcr;
+    const p = py + lambda * colorRaw;
+    const s = lambda * colorRaw / (py + lambda * colorRaw + EPS);
+    const alpha = Number(alphaEl.value);
+    const tau = Number(tauEl.value);
+    const beta = Number(betaEl.value);
+    const colorPenalty = (s - tau) ** 2;
+    const lambdaPenalty = (lambda - LAMBDA0) ** 2;
+    const j = alpha * p + (1 - alpha) * bColor + beta * colorPenalty + GAMMA * lambdaPenalty;
+    return { py, pcb, pcr, p, s, bColor, colorPenalty, lambdaPenalty, j };
+  }
+
+  function improveForLambda(startMaps, lambda, rounds = 5){
+    const n = startMaps[0].length;
+    const mapSet = startMaps.map(m => m.slice());
+    let bestJ = pieceMetrics(mapSet, lambda).j;
+    for(let round = 0; round < rounds; round++){
+      for(let img = 1; img < IMAGE_COUNT; img++){
+        for(let step = 0; step < n; step++){
+          const a = Math.floor(Math.random() * n);
+          const b = Math.floor(Math.random() * n);
+          [mapSet[img][a], mapSet[img][b]] = [mapSet[img][b], mapSet[img][a]];
+          const j = pieceMetrics(mapSet, lambda).j;
+          if(j + EPS < bestJ) bestJ = j;
+          else [mapSet[img][a], mapSet[img][b]] = [mapSet[img][b], mapSet[img][a]];
+        }
+      }
+    }
+    return mapSet;
+  }
+
+  function renderSynthetic(mapSet){
+    const grid = Number(gridSelect.value);
+    const cellSize = SIZE / grid;
+    const out = ctx.createImageData(SIZE, SIZE);
+    for(let slot = 0; slot < mapSet[0].length; slot++){
+      const dx0 = (slot % grid) * cellSize;
+      const dy0 = Math.floor(slot / grid) * cellSize;
+      const cellList = [0, 1, 2].map(img => cells[img][mapSet[img][slot]]);
+      for(let y = 0; y < cellSize; y++){
+        for(let x = 0; x < cellSize; x++){
+          let r = 0, g = 0, b = 0;
+          for(const cell of cellList){
+            const si = (y * cellSize + x) * 4;
+            r += cell.rgba[si]; g += cell.rgba[si + 1]; b += cell.rgba[si + 2];
+          }
+          const di = ((dy0 + y) * SIZE + (dx0 + x)) * 4;
+          out.data[di] = Math.round(r / IMAGE_COUNT);
+          out.data[di + 1] = Math.round(g / IMAGE_COUNT);
+          out.data[di + 2] = Math.round(b / IMAGE_COUNT);
+          out.data[di + 3] = 255;
+        }
+      }
+    }
+    ctx.putImageData(out, 0, 0);
+  }
+
+  function runEvaluation(){
+    if(!cells.length) return;
+    const rows = [];
+    let best = null;
+    for(const lambda of LAMBDA_CANDIDATES){
+      const improvedMaps = improveForLambda(maps, lambda);
+      const metrics = pieceMetrics(improvedMaps, lambda);
+      const row = { lambda, maps: improvedMaps, metrics };
+      rows.push(row);
+      if(!best || metrics.j < best.metrics.j) best = row;
+      log(`λ=${lambda.toFixed(2)} J=${fmt(metrics.j)} B_color=${fmt(metrics.bColor)} s=${fmt(metrics.s)}`);
+    }
+    maps = best.maps.map(m => m.slice());
+    renderSynthetic(maps);
+    renderRows(rows, best);
+    log(`採用: λ=${best.lambda.toFixed(2)} / J=${fmt(best.metrics.j)} / B_color=${fmt(best.metrics.bColor)}`);
+  }
+
+  function renderRows(rows, best){
+    resultEl.innerHTML = `<table><thead><tr><th>候補</th><th>J</th><th>P</th><th>P_Y</th><th>P_C</th><th>B_color</th><th>s</th><th>(s-τ)^2</th><th>(λ-λ0)^2</th></tr></thead><tbody>${rows.map(row => {
+      const m = row.metrics;
+      return `<tr class="${row === best ? 'best' : ''}"><td>λ=${row.lambda.toFixed(2)}</td><td>${fmt(m.j)}</td><td>${fmt(m.p)}</td><td>${fmt(m.py)}</td><td>${fmt(m.pcb + m.pcr)}</td><td>${fmt(m.bColor)}</td><td>${fmt(m.s)}</td><td>${fmt(m.colorPenalty)}</td><td>${fmt(m.lambdaPenalty)}</td></tr>`;
+    }).join('')}</tbody></table><p>緑の行が採用λです。B_colorは平均ΔE76を100で割って正規化した値です。</p>`;
+  }
+
+  document.getElementById('templateButton').addEventListener('click', generateTemplates);
+  document.getElementById('runButton').addEventListener('click', runEvaluation);
+  document.getElementById('shuffleButton').addEventListener('click', () => {
+    const n = Number(gridSelect.value) ** 2;
+    maps = [id(n), shuffle(id(n)), shuffle(id(n))];
+    log('割り当てをシャッフル');
+    runEvaluation();
+  });
+  gridSelect.addEventListener('change', () => { if(sourceData.length === IMAGE_COUNT) afterImagesChanged('分割数を変更'); });
+  [alphaEl, tauEl, betaEl].forEach(el => el.addEventListener('change', runEvaluation));
+  for(let i = 0; i < IMAGE_COUNT; i++){
+    document.getElementById(`file${i}`).addEventListener('change', event => {
+      const file = event.target.files && event.target.files[0];
+      if(file) loadFile(i, file).catch(error => { console.error(error); log('画像読み込みに失敗'); });
+    });
+  }
+
+  generateTemplates();
+})();
+</script>
+</body>
+</html>
