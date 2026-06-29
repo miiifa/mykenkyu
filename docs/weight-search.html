@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>UIサーチと色重み探索の説明</title>
   <style>
-    :root{--bg:#f6f8fb;--text:#172033;--muted:#627083;--line:#dce3ec;--primary:#4f66f0;--soft:#eef2ff;--notice:#ecfbf9;--green:#12615d;--shadow:0 18px 44px rgba(23,32,51,.10)}
+    :root{--bg:#f6f8fb;--text:#172033;--muted:#627083;--line:#dce3ec;--primary:#4f66f0;--soft:#eef2ff;--notice:#ecfbf9;--warn:#fff6e5;--green:#12615d;--orange:#895400;--shadow:0 18px 44px rgba(23,32,51,.10)}
     *{box-sizing:border-box}
     body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;line-height:1.75}
     main{width:min(980px,calc(100% - 32px));margin:auto;padding:24px 0 56px}
@@ -15,9 +15,12 @@
     .card{padding:26px;margin:18px 0}
     h1{font-size:clamp(32px,5vw,58px);line-height:1.12;letter-spacing:-.06em;margin:12px 0 18px}
     h2{letter-spacing:-.03em;margin:0 0 12px}
+    h3{margin:0 0 8px}
     p{color:var(--muted)}
     .badge{display:inline-flex;padding:5px 10px;margin:3px;border-radius:999px;background:var(--soft);color:#3443b6;font-size:12px;font-weight:900}
-    .note{padding:15px 17px;border-radius:18px;border:1px solid #b7e1dc;background:var(--notice);color:var(--green);font-weight:850}
+    .note,.warn{padding:15px 17px;border-radius:18px;font-weight:850;margin:12px 0}
+    .note{border:1px solid #b7e1dc;background:var(--notice);color:var(--green)}
+    .warn{border:1px solid #efd19b;background:var(--warn);color:var(--orange)}
     pre{overflow:auto;background:#101522;color:#d8e4ff;border-radius:18px;padding:16px;font-size:13px;line-height:1.6}
     code{font-family:ui-monospace,Menlo,Consolas,monospace}
     table{width:100%;border-collapse:collapse;background:#fff;border-radius:18px;overflow:hidden;border:1px solid var(--line)}
@@ -30,60 +33,115 @@
 </head>
 <body>
 <main>
-  <nav class="nav"><a href="./">研究パズル Web デモ</a><div><a href="./research.html">研究紹介</a> / <a href="./weight-search.html">色重み探索</a></div></nav>
+  <nav class="nav"><a href="./">研究パズル Web デモ</a><div><a href="./research.html">研究紹介</a> / <a href="./weight-search.html">色重み探索</a> / <a href="./progress.html">進捗日記</a></div></nav>
 
   <section class="card">
-    <span class="badge">UI Search</span><span class="badge">YCbCr</span><span class="badge">Heuristic Weight Search</span>
-    <h1>色重み探索は、<br>UIサーチの目的関数を選ぶ探索。</h1>
-    <p>このページは、デモに入れた「色重みを自動探索」が何をしているかを説明するメモです。結論から言うと、合成駒の内部ばらつきを下げる内側探索と、再構築画像の見た目でλを選ぶ外側探索を分けています。</p>
-    <div class="note">白黒で探索して最後に色を付けるわけではありません。探索コストの中で、明るさ Y を主役にしつつ、色差 Cb / Cr を λC で弱めに効かせています。</div>
+    <span class="badge">UI Search</span><span class="badge">YCbCr</span><span class="badge">Regularized Alternating Optimization</span>
+    <h1>色重み探索は、<br>λと割り当てを同時に考える問題。</h1>
+    <p>以前の説明では、複数の λC を試して再構築スコアで選ぶ二段階探索として書いていました。これはプロトタイプとしては使えますが、研究方針としては少し弱いです。最終的には、合成駒の組み合わせ π と色重み λC を、同じ目的関数の中でバランスさせる形に寄せます。</p>
+    <div class="note">重要なのは、λCをただ自由に最小化しないことです。制約や正則化なしに λC を目的関数へ入れると、色コストを無視する λC=0 に逃げやすくなります。</div>
   </section>
 
   <section class="card">
-    <h2>1. 内側の問題: λを固定してUIサーチ</h2>
-    <p>画像数を N、セル数を V とします。画像 i の割り当てを πᵢ として、合成駒 k は各画像から1セルずつ選ばれます。</p>
-    <pre><code>π*(λ) = argminπ C_piece(π; λ)</code></pre>
-    <p>ここで C_piece は、同じ合成駒に入るセル同士がどれだけ近いかを見るコストです。UIサーチでは1画像だけを動かし、他画像を固定します。すると普通の割当問題になるので、ハンガリー法または大きい分割ではgreedyで解きます。</p>
+    <h2>1. 危ない定式化</h2>
+    <p>単純に次のように書くと、目的関数は λC を小さくする方向に逃げます。</p>
+    <pre><code>min_{π, λC}  P_Y(π) + λC P_C(π)</code></pre>
+    <p>この式では、色の項 P_C が非負なので、λC を 0 にすれば目的関数が小さくなります。つまり「色を見ない」ことが最適化上は有利になります。</p>
+    <div class="warn">そのため、λC を最適化するなら、範囲制約、色寄与率の正則化、基準値からのズレの罰則が必要です。</div>
   </section>
 
   <section class="card">
-    <h2>2. セル特徴量: YCbCr</h2>
+    <h2>2. 修正版の目的関数</h2>
+    <p>まずは再配置変数を入れすぎず、合成駒の組み合わせ π と色重み λC を変数にします。</p>
+    <pre><code>min_{π, λC} J(π, λC)
+
+J(π, λC)
+= α P_hat(π, λC)
++ (1 - α) B_hat(π)
++ β (s(π, λC) - τ)^2
++ γ (λC - λ0)^2
+
+subject to
+π_i is a permutation
+λ_min <= λC <= λ_max</code></pre>
+    <p>ここで、P_hat は合成駒内部のばらつき、B_hat は見た目側の補助評価、s は色寄与率です。</p>
+  </section>
+
+  <section class="card">
+    <h2>3. 合成駒内部コスト P_hat</h2>
+    <p>画像 i の割り当てを π_i とし、合成駒 k に入るセル特徴量の平均との差を見ます。特徴量は YCbCr に分けます。</p>
+    <pre><code>P_hat(π, λC)
+= P_hat_Y(π)
++ λC { P_hat_Cb(π) + P_hat_Cr(π) }</code></pre>
     <div class="grid">
-      <div class="mini"><h3>Y</h3><p>明るさ。形、輪郭、濃淡に効くので主成分として扱います。デモでは4×4ブロック平均。</p></div>
-      <div class="mini"><h3>Cb / Cr</h3><p>色味。色に引っ張られすぎると形が崩れるため、2×2ブロック平均にして λC で補助的に効かせます。</p></div>
+      <div class="mini"><h3>Y</h3><p>明るさ。形、輪郭、濃淡を担うため主成分として扱います。</p></div>
+      <div class="mini"><h3>Cb / Cr</h3><p>色味。色に引っ張られすぎないよう、λCで補助的に効かせます。</p></div>
     </div>
-    <pre><code>C_k = D_Y(k) + λC D_Cb(k) + λC D_Cr(k)</code></pre>
-    <p>D_Y, D_Cb, D_Cr は、それぞれ合成駒内での平均との差の二乗和です。次元数の違いで片方だけ強くなりすぎないよう、ベクトル長で割って平均二乗誤差として扱います。</p>
   </section>
 
   <section class="card">
-    <h2>3. 外側の問題: λを変えて再構築スコアで選ぶ</h2>
-    <p>λを変えると、合成駒を作る目的関数そのものが変わります。そのため、同じ C_piece だけでλを比較すると循環します。そこで、外側では固定の再構築スコアを使います。</p>
-    <pre><code>λ* = argminλ C_recon(π*(λ))
+    <h2>4. 色寄与率の正則化</h2>
+    <p>λC が 0 に逃げないよう、目的関数の中に色寄与率の目標を入れます。</p>
+    <pre><code>s(π, λC)
+= λC { P_hat_Cb(π) + P_hat_Cr(π) }
+  / { P_hat_Y(π) + λC(P_hat_Cb(π)+P_hat_Cr(π)) + ε }
 
-C_recon = E_Y + 0.35 E_Cb + 0.35 E_Cr</code></pre>
-    <p>つまり、各λでUIサーチを軽く回し、その結果できた合成駒で元画像にどれだけ戻せるかを見て、最も良いλを採用します。</p>
+penalty = β (s(π, λC) - τ)^2</code></pre>
+    <p>τ は目標となる色寄与率です。たとえば τ=0.25 とすれば、探索コストのうち色がだいたい25%程度効くように誘導します。</p>
   </section>
 
   <section class="card">
-    <h2>4. デモで試しているλ候補</h2>
+    <h2>5. λの暴れ防止</h2>
+    <p>画像セットによっては、色差が極端に小さかったり大きかったりします。その場合、λC が端に寄りすぎる可能性があります。</p>
+    <pre><code>regularization = γ (λC - λ0)^2
+
+example:
+λ0 = 0.35
+λ_min = 0.10
+λ_max = 0.80</code></pre>
+    <p>基準値 λ0 から離れすぎると罰則をかけることで、色の扱いを安定させます。</p>
+  </section>
+
+  <section class="card">
+    <h2>6. 見た目側の B_hat は別特徴を見る</h2>
+    <p>再構築側の評価を、合成駒内部コストと同じ特徴で作ると、ほぼ同じ目的を二重に足すだけになります。そのため B_hat では、P_hat とは違う情報を見る必要があります。</p>
     <table>
-      <thead><tr><th>λC</th><th>意味</th><th>起こりやすいこと</th></tr></thead>
+      <thead><tr><th>候補</th><th>見る情報</th><th>役割</th></tr></thead>
       <tbody>
-        <tr><td>0.00</td><td>グレースケール探索</td><td>明暗や形を重視。色は探索上は無視される。</td></tr>
-        <tr><td>0.15〜0.30</td><td>弱めの色補助</td><td>形を大きく壊さず、少し色を合わせる。</td></tr>
-        <tr><td>0.45〜0.60</td><td>中〜強めの色補助</td><td>色の印象は近づくが、形がやや崩れる可能性がある。</td></tr>
-        <tr><td>0.80</td><td>かなり色重視</td><td>カラフルな画像では効く可能性があるが、色に引っ張られやすい。</td></tr>
+        <tr><td>ブロック特徴</td><td>セル内の2×2または4×4ブロック平均</td><td>グラデーションや局所的なムラを拾う。</td></tr>
+        <tr><td>エッジ特徴</td><td>セル内の明暗変化・境界方向</td><td>輪郭が崩れすぎる組み合わせを避ける。</td></tr>
+        <tr><td>隣接連続性</td><td>隣のセルとの境界差</td><td>並べたときのつながりを評価する。</td></tr>
       </tbody>
     </table>
+    <div class="warn">B_hat を P_hat と同じ YCbCr平均との差で定義すると、二観点最適化にならないので注意します。</div>
   </section>
 
   <section class="card">
-    <h2>5. 次の拡張: ブロックモデル再配置</h2>
-    <p>今の重み探索は、合成駒の作り方を改善する方向です。一方で、最終的な見た目をさらに良くするには、作った合成駒をどの位置に置くかも重要です。</p>
-    <div class="note">次の本命は、合成駒生成は UIサーチ + YCbCr で行い、その後にブロックモデルで再配置することです。これは「合成駒として良いか」と「絵として戻せるか」を分ける方針です。</div>
-    <pre><code>合成駒生成: UIサーチ + YCbCr + λ探索
-再配置補正: ブロックモデルで、元画像の局所的なムラやグラデーションに近づける</code></pre>
+    <h2>7. 実装は交互最適化にする</h2>
+    <p>π と λC を厳密に同時最適化するのは重すぎます。デモでは、交互最適化として近似します。</p>
+    <pre><code>initialize π, λC
+
+repeat:
+  1. λC fixed: improve π by UI search
+  2. π fixed: search λC in neighborhood
+  3. evaluate J(π, λC)
+  4. accept if J improves
+  5. if stuck, shake π slightly
+
+keep best (π, λC)</code></pre>
+    <p>現状のデモに入っている「複数λを試して選ぶ」方法は、この交互最適化へ向かうためのプロトタイプとして扱います。</p>
+  </section>
+
+  <section class="card">
+    <h2>8. ブロックモデル再配置 z との関係</h2>
+    <p>合成駒を作ったあとに、各画像に対して合成駒を置き直す変数 z または ρ を入れることもできます。ただしこれは UIサーチ本体とは別段階として整理します。</p>
+    <pre><code>generation:
+  min_{π, λC} J(π, λC)
+
+re-placement:
+  min_{ρ} R(π, ρ)</code></pre>
+    <p>つまり、まず UIサーチ + YCbCr + 正則化付きλ探索で合成駒集合を作り、その後にブロックモデルで再配置補正を行う、という二段構成にします。</p>
+    <div class="note">この分離により、「合成駒として良いか」と「絵として自然に戻せるか」を混同せずに実装できます。</div>
   </section>
 </main>
 </body>
