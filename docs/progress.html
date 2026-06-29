@@ -31,7 +31,7 @@
 </head>
 <body>
 <main>
-  <nav class="nav"><a href="./">研究パズル Web デモ</a><div><a href="./research.html">研究紹介</a> / <a href="./weight-search.html">色重み探索</a> / <a href="./progress.html">進捗日記</a></div></nav>
+  <nav class="nav"><a href="./">研究パズル Web デモ</a><div><a href="./research.html">研究紹介</a> / <a href="./weight-search.html">色重み探索</a> / <a href="./j-objective.html">J評価仕様</a> / <a href="./progress.html">進捗日記</a></div></nav>
 
   <section class="card">
     <span class="badge">Research Web</span><span class="badge">Progress Diary</span><span class="badge">UI Search Demo</span>
@@ -49,7 +49,8 @@
         <tr><td>合成駒生成</td><td>3枚画像から同じスロットのセルを平均し、合成駒を作る。</td><td>完了</td></tr>
         <tr><td>UIサーチ</td><td>1画像ずつ割り当てを改善し、局所最適まで進める。</td><td>実装済み。局所脱出も分離。</td></tr>
         <tr><td>カラー探索</td><td>グレースケールだけでなく、YCbCrで色も補助的に見る。</td><td>実装済み。λC自動探索のプロトタイプあり。</td></tr>
-        <tr><td>定式化見直し</td><td>λCが0に逃げないよう、正則化付きの同時最適化方針へ整理する。</td><td>今回更新</td></tr>
+        <tr><td>定式化見直し</td><td>λCが0に逃げないよう、正則化付きの同時最適化方針へ整理する。</td><td>完了</td></tr>
+        <tr><td>J評価仕様</td><td>コード実装前に、Jの項・係数・表示値を固定する。</td><td>今回追加</td></tr>
         <tr><td>ブロックモデル</td><td>合成駒生成後の再配置・見た目補正を追加する。</td><td>次の本命</td></tr>
       </tbody>
     </table>
@@ -83,8 +84,12 @@
         <p>λC探索の説明ページを追加。内側でUIサーチ、外側で再構築スコア評価という二段階の考え方を整理した。</p>
       </li>
       <li class="item">
-        <h3><span class="tag">今回</span> 定式化のレビューと方針修正</h3>
+        <h3><span class="tag">PR #13</span> 定式化のレビューと方針修正</h3>
         <p>λCを単純に目的関数へ入れると0へ逃げる問題、再構築コストが合成駒コストと同じになりうる問題、再配置変数をUIサーチ本体に混ぜすぎる問題を確認。正則化付きの交互最適化として整理し直した。</p>
+      </li>
+      <li class="item">
+        <h3><span class="tag">今回</span> J評価の実装仕様を固定</h3>
+        <p>次にデモ本体へ実装する前に、J(π, λC) の各項、初期係数、色寄与率、UI表示値、変更対象関数を仕様ページとして整理した。</p>
       </li>
     </ul>
   </section>
@@ -98,6 +103,7 @@
         <tr><td>合成駒コストと再構築コストが同じ特徴だと、二観点最適化にならない。</td><td>見た目側はブロック特徴、エッジ、隣接連続性など別特徴を見る。</td></tr>
         <tr><td>再配置変数をUIサーチ本体に混ぜると、問題設定が分かりにくくなる。</td><td>合成駒生成とブロックモデル再配置を二段構成として説明する。</td></tr>
         <tr><td>リプレイが探索状態を直接変更すると、探索本体が壊れやすい。</td><td>previewDataで表示専用にする。</td></tr>
+        <tr><td>デモ本体を触る前に、目的関数仕様を固定した方がよい。</td><td>J評価仕様ページを作り、次の実装対象を明確にする。</td></tr>
       </tbody>
     </table>
   </section>
@@ -108,8 +114,8 @@
       <li>デモ本体のλ探索を、単純な候補選択から正則化付きJ評価へ寄せる。</li>
       <li>π固定でλCを近傍探索するステップを追加し、交互最適化にする。</li>
       <li>見た目側の B_hat として、ブロック特徴またはエッジ特徴を実装する。</li>
-      <li>ブロックモデル再配置を、UIサーチ本体とは別の補正ステップとして追加する。</li>
-      <li>トップページから説明ページ・進捗日記への導線を追加する。</li>
+      <li>重み探索結果テーブルに、λ, J, P, B, s, penalty を表示する。</li>
+      <li>トップページから説明ページ・J評価仕様・進捗日記への導線を追加する。</li>
     </ul>
   </section>
 </main>

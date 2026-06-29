@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>正則化付きJ評価の実装仕様</title>
+  <style>
+    :root{--bg:#f6f8fb;--text:#172033;--muted:#627083;--line:#dce3ec;--primary:#4f66f0;--soft:#eef2ff;--notice:#ecfbf9;--warn:#fff6e5;--green:#12615d;--orange:#895400;--shadow:0 18px 44px rgba(23,32,51,.10)}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;line-height:1.75}
+    main{width:min(980px,calc(100% - 32px));margin:auto;padding:24px 0 56px}
+    .nav,.card{background:rgba(255,255,255,.95);border:1px solid var(--line);border-radius:26px;box-shadow:var(--shadow)}
+    .nav{display:flex;justify-content:space-between;gap:12px;margin-bottom:18px;padding:12px 16px;border-radius:999px}
+    .nav a{font-weight:900;color:var(--text);text-decoration:none}
+    .card{padding:26px;margin:18px 0}
+    h1{font-size:clamp(32px,5vw,58px);line-height:1.12;letter-spacing:-.06em;margin:12px 0 18px}
+    h2{letter-spacing:-.03em;margin:0 0 12px}
+    h3{margin:0 0 8px}
+    p{color:var(--muted)}
+    .badge{display:inline-flex;padding:5px 10px;margin:3px;border-radius:999px;background:var(--soft);color:#3443b6;font-size:12px;font-weight:900}
+    .note,.warn{padding:15px 17px;border-radius:18px;font-weight:850;margin:12px 0}
+    .note{border:1px solid #b7e1dc;background:var(--notice);color:var(--green)}
+    .warn{border:1px solid #efd19b;background:var(--warn);color:var(--orange)}
+    pre{overflow:auto;background:#101522;color:#d8e4ff;border-radius:18px;padding:16px;font-size:13px;line-height:1.6}
+    code{font-family:ui-monospace,Menlo,Consolas,monospace}
+    table{width:100%;border-collapse:collapse;background:#fff;border-radius:18px;overflow:hidden;border:1px solid var(--line)}
+    th,td{border-bottom:1px solid var(--line);padding:10px;text-align:left;vertical-align:top}
+    th{background:#f2f5fb}
+    @media(max-width:760px){main{width:calc(100% - 18px);padding-top:12px}.nav{border-radius:22px;flex-direction:column}.card{padding:18px;border-radius:22px}}
+  </style>
+</head>
+<body>
+<main>
+  <nav class="nav"><a href="./">研究パズル Web デモ</a><div><a href="./research.html">研究紹介</a> / <a href="./weight-search.html">色重み探索</a> / <a href="./j-objective.html">J評価仕様</a> / <a href="./progress.html">進捗日記</a></div></nav>
+
+  <section class="card">
+    <span class="badge">J Objective</span><span class="badge">Implementation Spec</span><span class="badge">Alternating Optimization</span>
+    <h1>次の実装は、<br>候補λ選択からJ評価へ。</h1>
+    <p>現在のデモでは、複数のλC候補を試し、再構築スコアが最も良いものを採用しています。次の実装では、説明ページで整理した正則化付き目的関数 J(π, λC) を明示的に計算し、Jが小さい解を採用する形へ寄せます。</p>
+    <div class="note">このページは、次に index.html を変更するときの実装仕様です。いきなりコードを大きく触る前に、何を計算するかを固定します。</div>
+  </section>
+
+  <section class="card">
+    <h2>1. 目的関数</h2>
+    <pre><code>J(π, λC)
+= α P_hat(π, λC)
++ (1 - α) B_hat(π)
++ β (s(π, λC) - τ)^2
++ γ (λC - λ0)^2</code></pre>
+    <table>
+      <thead><tr><th>記号</th><th>意味</th><th>初期値</th></tr></thead>
+      <tbody>
+        <tr><td>α</td><td>合成駒内部コストと見た目補助評価のバランス</td><td>0.75</td></tr>
+        <tr><td>β</td><td>色寄与率が目標τからズレる罰則</td><td>0.20</td></tr>
+        <tr><td>γ</td><td>λCが基準λ0からズレる罰則</td><td>0.05</td></tr>
+        <tr><td>τ</td><td>目標色寄与率</td><td>0.25</td></tr>
+        <tr><td>λ0</td><td>基準色重み</td><td>0.35</td></tr>
+        <tr><td>λ範囲</td><td>λCが極端に逃げるのを防ぐ範囲</td><td>0.10〜0.80</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>2. P_hat: 合成駒内部コスト</h2>
+    <p>既存のUIサーチで使っているコストを分解して使います。Y, Cb, Cr の各成分を個別に計算し、λCで色成分を重み付けします。</p>
+    <pre><code>P_hat_Y(π)  = normalized piece variance for Y
+P_hat_Cb(π) = normalized piece variance for Cb
+P_hat_Cr(π) = normalized piece variance for Cr
+
+P_hat(π, λC)
+= P_hat_Y(π) + λC { P_hat_Cb(π) + P_hat_Cr(π) }</code></pre>
+    <div class="warn">P_hat はスケール差が出やすいので、セル数・画像数・特徴次元で割って正規化してから J に入れる。</div>
+  </section>
+
+  <section class="card">
+    <h2>3. s: 色寄与率</h2>
+    <p>λCが0に逃げないように、探索コスト中で色成分がどれくらい寄与しているかを測ります。</p>
+    <pre><code>color = λC { P_hat_Cb(π) + P_hat_Cr(π) }
+total = P_hat_Y(π) + color + ε
+s = color / total</code></pre>
+    <p>この s が τ=0.25 に近づくように、β(s-τ)^2 を加えます。</p>
+  </section>
+
+  <section class="card">
+    <h2>4. B_hat: 見た目補助評価</h2>
+    <p>最初の実装では、B_hat は軽いブロック特徴から始めます。セル内を 2×2 ブロックに分け、合成駒と元セルのブロック平均のズレを見る想定です。</p>
+    <pre><code>B_hat(π)
+= average block mismatch between synthetic pieces and original cells</code></pre>
+    <div class="note">B_hat は P_hat と同じ「平均との差」だけにしない。局所ブロック、エッジ、隣接連続性など、合成駒内部コストとは違う観点を使う。</div>
+  </section>
+
+  <section class="card">
+    <h2>5. 探索手順</h2>
+    <p>まずは厳密な同時最適化ではなく、交互最適化で近似します。</p>
+    <pre><code>initialize π, λC
+best = (π, λC, J)
+
+repeat:
+  # step A: λC fixed
+  run UI search and update π
+
+  # step B: π fixed
+  try neighborhood λ candidates
+  compute J(π, λC') for each
+  choose best λC'
+
+  # step C: accept
+  if J improves:
+    update best
+  else:
+    shake π slightly
+
+return best</code></pre>
+  </section>
+
+  <section class="card">
+    <h2>6. UIに出す値</h2>
+    <table>
+      <thead><tr><th>表示</th><th>意味</th></tr></thead>
+      <tbody>
+        <tr><td>λC</td><td>採用された色重み</td></tr>
+        <tr><td>J</td><td>正則化込みの総合目的関数</td></tr>
+        <tr><td>P</td><td>合成駒内部コスト</td></tr>
+        <tr><td>B</td><td>ブロック見た目補助評価</td></tr>
+        <tr><td>s</td><td>色寄与率</td></tr>
+        <tr><td>penalty</td><td>色寄与率・λ基準値からのズレ罰則</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>7. 次のPRで触る関数</h2>
+    <table>
+      <thead><tr><th>関数</th><th>変更内容</th></tr></thead>
+      <tbody>
+        <tr><td>costFromFeatures</td><td>Y, Cb, Cr の内訳を返せるようにする。</td></tr>
+        <tr><td>totalCost</td><td>P_hat_Y / P_hat_Cb / P_hat_Cr を計算する関数へ分割する。</td></tr>
+        <tr><td>reconstructionScore</td><td>B_hat の土台として、ブロック特徴評価へ置き換える。</td></tr>
+        <tr><td>runWeightSearch</td><td>score ではなく J を比較して λC を採用する。</td></tr>
+        <tr><td>renderWeightRows</td><td>λ, J, P, B, s を表示する。</td></tr>
+      </tbody>
+    </table>
+  </section>
+</main>
+</body>
+</html>
