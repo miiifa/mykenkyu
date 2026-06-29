@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UIサーチと色重み探索の説明</title>
+  <style>
+    :root{--bg:#f6f8fb;--text:#172033;--muted:#627083;--line:#dce3ec;--primary:#4f66f0;--soft:#eef2ff;--notice:#ecfbf9;--green:#12615d;--shadow:0 18px 44px rgba(23,32,51,.10)}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;line-height:1.75}
+    main{width:min(980px,calc(100% - 32px));margin:auto;padding:24px 0 56px}
+    .nav,.card{background:rgba(255,255,255,.95);border:1px solid var(--line);border-radius:26px;box-shadow:var(--shadow)}
+    .nav{display:flex;justify-content:space-between;gap:12px;margin-bottom:18px;padding:12px 16px;border-radius:999px}
+    .nav a{font-weight:900;color:var(--text);text-decoration:none}
+    .card{padding:26px;margin:18px 0}
+    h1{font-size:clamp(32px,5vw,58px);line-height:1.12;letter-spacing:-.06em;margin:12px 0 18px}
+    h2{letter-spacing:-.03em;margin:0 0 12px}
+    p{color:var(--muted)}
+    .badge{display:inline-flex;padding:5px 10px;margin:3px;border-radius:999px;background:var(--soft);color:#3443b6;font-size:12px;font-weight:900}
+    .note{padding:15px 17px;border-radius:18px;border:1px solid #b7e1dc;background:var(--notice);color:var(--green);font-weight:850}
+    pre{overflow:auto;background:#101522;color:#d8e4ff;border-radius:18px;padding:16px;font-size:13px;line-height:1.6}
+    code{font-family:ui-monospace,Menlo,Consolas,monospace}
+    table{width:100%;border-collapse:collapse;background:#fff;border-radius:18px;overflow:hidden;border:1px solid var(--line)}
+    th,td{border-bottom:1px solid var(--line);padding:10px;text-align:left;vertical-align:top}
+    th{background:#f2f5fb}
+    .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+    .mini{padding:16px;border:1px solid var(--line);border-radius:18px;background:#fff}
+    @media(max-width:760px){main{width:calc(100% - 18px);padding-top:12px}.nav{border-radius:22px;flex-direction:column}.card{padding:18px;border-radius:22px}.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<main>
+  <nav class="nav"><a href="./">研究パズル Web デモ</a><div><a href="./research.html">研究紹介</a> / <a href="./weight-search.html">色重み探索</a></div></nav>
+
+  <section class="card">
+    <span class="badge">UI Search</span><span class="badge">YCbCr</span><span class="badge">Heuristic Weight Search</span>
+    <h1>色重み探索は、<br>UIサーチの目的関数を選ぶ探索。</h1>
+    <p>このページは、デモに入れた「色重みを自動探索」が何をしているかを説明するメモです。結論から言うと、合成駒の内部ばらつきを下げる内側探索と、再構築画像の見た目でλを選ぶ外側探索を分けています。</p>
+    <div class="note">白黒で探索して最後に色を付けるわけではありません。探索コストの中で、明るさ Y を主役にしつつ、色差 Cb / Cr を λC で弱めに効かせています。</div>
+  </section>
+
+  <section class="card">
+    <h2>1. 内側の問題: λを固定してUIサーチ</h2>
+    <p>画像数を N、セル数を V とします。画像 i の割り当てを πᵢ として、合成駒 k は各画像から1セルずつ選ばれます。</p>
+    <pre><code>π*(λ) = argminπ C_piece(π; λ)</code></pre>
+    <p>ここで C_piece は、同じ合成駒に入るセル同士がどれだけ近いかを見るコストです。UIサーチでは1画像だけを動かし、他画像を固定します。すると普通の割当問題になるので、ハンガリー法または大きい分割ではgreedyで解きます。</p>
+  </section>
+
+  <section class="card">
+    <h2>2. セル特徴量: YCbCr</h2>
+    <div class="grid">
+      <div class="mini"><h3>Y</h3><p>明るさ。形、輪郭、濃淡に効くので主成分として扱います。デモでは4×4ブロック平均。</p></div>
+      <div class="mini"><h3>Cb / Cr</h3><p>色味。色に引っ張られすぎると形が崩れるため、2×2ブロック平均にして λC で補助的に効かせます。</p></div>
+    </div>
+    <pre><code>C_k = D_Y(k) + λC D_Cb(k) + λC D_Cr(k)</code></pre>
+    <p>D_Y, D_Cb, D_Cr は、それぞれ合成駒内での平均との差の二乗和です。次元数の違いで片方だけ強くなりすぎないよう、ベクトル長で割って平均二乗誤差として扱います。</p>
+  </section>
+
+  <section class="card">
+    <h2>3. 外側の問題: λを変えて再構築スコアで選ぶ</h2>
+    <p>λを変えると、合成駒を作る目的関数そのものが変わります。そのため、同じ C_piece だけでλを比較すると循環します。そこで、外側では固定の再構築スコアを使います。</p>
+    <pre><code>λ* = argminλ C_recon(π*(λ))
+
+C_recon = E_Y + 0.35 E_Cb + 0.35 E_Cr</code></pre>
+    <p>つまり、各λでUIサーチを軽く回し、その結果できた合成駒で元画像にどれだけ戻せるかを見て、最も良いλを採用します。</p>
+  </section>
+
+  <section class="card">
+    <h2>4. デモで試しているλ候補</h2>
+    <table>
+      <thead><tr><th>λC</th><th>意味</th><th>起こりやすいこと</th></tr></thead>
+      <tbody>
+        <tr><td>0.00</td><td>グレースケール探索</td><td>明暗や形を重視。色は探索上は無視される。</td></tr>
+        <tr><td>0.15〜0.30</td><td>弱めの色補助</td><td>形を大きく壊さず、少し色を合わせる。</td></tr>
+        <tr><td>0.45〜0.60</td><td>中〜強めの色補助</td><td>色の印象は近づくが、形がやや崩れる可能性がある。</td></tr>
+        <tr><td>0.80</td><td>かなり色重視</td><td>カラフルな画像では効く可能性があるが、色に引っ張られやすい。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>5. 次の拡張: ブロックモデル再配置</h2>
+    <p>今の重み探索は、合成駒の作り方を改善する方向です。一方で、最終的な見た目をさらに良くするには、作った合成駒をどの位置に置くかも重要です。</p>
+    <div class="note">次の本命は、合成駒生成は UIサーチ + YCbCr で行い、その後にブロックモデルで再配置することです。これは「合成駒として良いか」と「絵として戻せるか」を分ける方針です。</div>
+    <pre><code>合成駒生成: UIサーチ + YCbCr + λ探索
+再配置補正: ブロックモデルで、元画像の局所的なムラやグラデーションに近づける</code></pre>
+  </section>
+</main>
+</body>
+</html>
