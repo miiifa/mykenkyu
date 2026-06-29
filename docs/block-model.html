@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ブロックモデル再配置の説明</title>
+  <style>
+    :root{--bg:#f6f8fb;--text:#172033;--muted:#627083;--line:#dce3ec;--primary:#4f66f0;--soft:#eef2ff;--notice:#ecfbf9;--green:#12615d;--shadow:0 18px 44px rgba(23,32,51,.10)}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;line-height:1.75}
+    main{width:min(980px,calc(100% - 32px));margin:auto;padding:24px 0 56px}
+    .nav,.card{background:rgba(255,255,255,.95);border:1px solid var(--line);border-radius:26px;box-shadow:var(--shadow)}
+    .nav{display:flex;justify-content:space-between;gap:12px;margin-bottom:18px;padding:12px 16px;border-radius:999px}
+    .nav a{font-weight:900;color:var(--text);text-decoration:none}
+    .card{padding:26px;margin:18px 0}
+    h1{font-size:clamp(32px,5vw,58px);line-height:1.12;letter-spacing:-.06em;margin:12px 0 18px}
+    h2{letter-spacing:-.03em;margin:0 0 12px}
+    p{color:var(--muted)}
+    .badge{display:inline-flex;padding:5px 10px;margin:3px;border-radius:999px;background:var(--soft);color:#3443b6;font-size:12px;font-weight:900}
+    .note{padding:15px 17px;border-radius:18px;border:1px solid #b7e1dc;background:var(--notice);color:var(--green);font-weight:850}
+    pre{overflow:auto;background:#101522;color:#d8e4ff;border-radius:18px;padding:16px;font-size:13px;line-height:1.6}
+    table{width:100%;border-collapse:collapse;background:#fff;border-radius:18px;overflow:hidden;border:1px solid var(--line)}
+    th,td{border-bottom:1px solid var(--line);padding:10px;text-align:left;vertical-align:top}
+    th{background:#f2f5fb}
+    .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+    .mini{padding:16px;border:1px solid var(--line);border-radius:18px;background:#fff}
+    @media(max-width:760px){main{width:calc(100% - 18px);padding-top:12px}.nav{border-radius:22px;flex-direction:column}.card{padding:18px;border-radius:22px}.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<main>
+  <nav class="nav"><a href="./">研究パズル Web デモ</a><div><a href="./research.html">研究紹介</a> / <a href="./weight-search.html">色重み探索</a> / <a href="./block-model.html">ブロックモデル</a></div></nav>
+
+  <section class="card">
+    <span class="badge">Block Model</span><span class="badge">Re-placement</span><span class="badge">Visual Correction</span>
+    <h1>ブロックモデルは、<br>合成駒を作った後の見た目補正。</h1>
+    <p>UIサーチと色重み探索は、どのセル同士を同じ合成駒に入れるかを決める処理です。一方で、最終的に絵として見えるかどうかは、その合成駒をどこに置くかにも強く依存します。</p>
+    <div class="note">つまり、合成駒生成と再配置は分けて考えた方がよいです。UIサーチは「合成駒として近い組み合わせ」を探し、ブロックモデルは「その合成駒を絵として自然に見える位置へ置く」ために使います。</div>
+  </section>
+
+  <section class="card">
+    <h2>1. なぜ必要か</h2>
+    <p>平均との差の二乗和や YCbCr コストは、同じ合成駒に入るセル同士の近さを見ます。しかし、それだけでは元画像の局所的なムラ、グラデーション、輪郭の流れを直接は評価できません。</p>
+    <div class="grid">
+      <div class="mini"><h3>合成駒コスト</h3><p>同じスロットに入るセルが互いに似ているかを見る。合成駒そのものの安定性に効く。</p></div>
+      <div class="mini"><h3>再配置コスト</h3><p>作った合成駒を並べたときに、元画像の局所的な明暗や色の流れに近いかを見る。</p></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>2. 定式化のイメージ</h2>
+    <p>合成駒集合 S が決まった後、画像 t を再構築するとします。合成駒 k を位置 p に置いたときのブロック誤差を w(k,p) とします。</p>
+    <pre><code>ρ_t* = argminρ Σ_p w(ρ_t(p), p)</code></pre>
+    <p>ここで ρ_t は、合成駒を元画像 t の各位置へ割り当てる順列です。つまり、これも割当問題として扱えます。</p>
+  </section>
+
+  <section class="card">
+    <h2>3. ブロック誤差</h2>
+    <p>各セルをさらに小さいブロック、たとえば 2×2 に分けます。合成駒と元画像セルのブロック平均を比較して、局所的なムラやグラデーションの近さを見ます。</p>
+    <pre><code>w(k,p) = Σ_b || block(S_k, b) - block(I_t,p, b) ||²</code></pre>
+    <p>このとき、全画素を直接見るより軽く、単純なセル平均よりは細かい見た目の流れを拾えます。</p>
+  </section>
+
+  <section class="card">
+    <h2>4. 今後の実装順</h2>
+    <table>
+      <thead><tr><th>段階</th><th>内容</th><th>狙い</th></tr></thead>
+      <tbody>
+        <tr><td>Step 1</td><td>UIサーチ + YCbCr + λ探索</td><td>合成駒の組み合わせを改善する。</td></tr>
+        <tr><td>Step 2</td><td>ブロックモデル再配置</td><td>できた合成駒を、各画像に対して見た目が自然な位置へ置く。</td></tr>
+        <tr><td>Step 3</td><td>比較表示</td><td>通常配置とブロック補正後を並べて、効果を確認する。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>5. デモでの置き場所</h2>
+    <p>本実装では、デモに「ブロック補正」ボタンを追加し、再構築1/2/3に対して補正後のビューを作る予定です。</p>
+    <div class="note">合成駒生成をやり直すのではなく、すでに作った合成駒集合を使って、各画像ごとの配置だけをもう一度解くのがポイントです。</div>
+  </section>
+</main>
+</body>
+</html>
