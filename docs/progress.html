@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>研究デモ進捗日記</title>
+  <style>
+    :root{--bg:#f6f8fb;--text:#172033;--muted:#627083;--line:#dce3ec;--primary:#4f66f0;--soft:#eef2ff;--notice:#ecfbf9;--green:#12615d;--shadow:0 18px 44px rgba(23,32,51,.10)}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;line-height:1.75}
+    main{width:min(980px,calc(100% - 32px));margin:auto;padding:24px 0 56px}
+    .nav,.card{background:rgba(255,255,255,.95);border:1px solid var(--line);border-radius:26px;box-shadow:var(--shadow)}
+    .nav{display:flex;justify-content:space-between;gap:12px;margin-bottom:18px;padding:12px 16px;border-radius:999px}
+    .nav a{font-weight:900;color:var(--text);text-decoration:none}
+    .card{padding:26px;margin:18px 0}
+    h1{font-size:clamp(32px,5vw,58px);line-height:1.12;letter-spacing:-.06em;margin:12px 0 18px}
+    h2{letter-spacing:-.03em;margin:0 0 12px}
+    h3{margin:0 0 8px}
+    p{color:var(--muted)}
+    .badge{display:inline-flex;padding:5px 10px;margin:3px;border-radius:999px;background:var(--soft);color:#3443b6;font-size:12px;font-weight:900}
+    .note{padding:15px 17px;border-radius:18px;border:1px solid #b7e1dc;background:var(--notice);color:var(--green);font-weight:850;margin:12px 0}
+    .timeline{position:relative;margin:0;padding:0;list-style:none}
+    .item{padding:18px 18px 18px 22px;border:1px solid var(--line);border-radius:20px;background:#fff;margin:14px 0}
+    .item h3{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+    .tag{display:inline-flex;border-radius:999px;background:#eef2ff;color:#3443b6;font-size:12px;font-weight:900;padding:3px 8px}
+    table{width:100%;border-collapse:collapse;background:#fff;border-radius:18px;overflow:hidden;border:1px solid var(--line)}
+    th,td{border-bottom:1px solid var(--line);padding:10px;text-align:left;vertical-align:top}
+    th{background:#f2f5fb}
+    @media(max-width:760px){main{width:calc(100% - 18px);padding-top:12px}.nav{border-radius:22px;flex-direction:column}.card{padding:18px;border-radius:22px}}
+  </style>
+</head>
+<body>
+<main>
+  <nav class="nav"><a href="./">研究パズル Web デモ</a><div><a href="./research.html">研究紹介</a> / <a href="./weight-search.html">色重み探索</a> / <a href="./progress.html">進捗日記</a></div></nav>
+
+  <section class="card">
+    <span class="badge">Research Web</span><span class="badge">Progress Diary</span><span class="badge">UI Search Demo</span>
+    <h1>研究デモ進捗日記</h1>
+    <p>論文・メモ・既存コードの意図を手がかりに、3枚画像の合成駒デモを段階的に復元・改善してきた記録です。実装内容だけでなく、途中で気づいた問題点や方針転換も残します。</p>
+    <div class="note">目的は、単にWebページを作ることではなく、修士研究の「3枚以上の画像を同じ合成駒集合で表現する」考え方を、動くデモとして検証できる状態に近づけることです。</div>
+  </section>
+
+  <section class="card">
+    <h2>全体方針</h2>
+    <table>
+      <thead><tr><th>段階</th><th>狙い</th><th>現在の状態</th></tr></thead>
+      <tbody>
+        <tr><td>MVP</td><td>GitHub Pages上で研究デモを見られるようにする。</td><td>完了</td></tr>
+        <tr><td>合成駒生成</td><td>3枚画像から同じスロットのセルを平均し、合成駒を作る。</td><td>完了</td></tr>
+        <tr><td>UIサーチ</td><td>1画像ずつ割り当てを改善し、局所最適まで進める。</td><td>実装済み。局所脱出も分離。</td></tr>
+        <tr><td>カラー探索</td><td>グレースケールだけでなく、YCbCrで色も補助的に見る。</td><td>実装済み。λC自動探索のプロトタイプあり。</td></tr>
+        <tr><td>定式化見直し</td><td>λCが0に逃げないよう、正則化付きの同時最適化方針へ整理する。</td><td>今回更新</td></tr>
+        <tr><td>ブロックモデル</td><td>合成駒生成後の再配置・見た目補正を追加する。</td><td>次の本命</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>作業ログ</h2>
+    <ul class="timeline">
+      <li class="item">
+        <h3><span class="tag">PR #1〜#3</span> 初期デモと合成駒生成</h3>
+        <p>まずは静的な研究紹介ページと、GitHub Pagesで動くデモの土台を作成。3枚画像を分割し、各画像から1セルずつ選んでRGB平均の合成駒を作る構造を実装した。</p>
+      </li>
+      <li class="item">
+        <h3><span class="tag">PR #4</span> UIサーチ風の改善ループ</h3>
+        <p>合成駒の内部ばらつきをコストとして、1画像だけを動かす割当問題に分解。ハンガリー法を使って、固定された他画像に対して選択画像の割り当てを改善する流れを作った。</p>
+      </li>
+      <li class="item">
+        <h3><span class="tag">PR #5〜#8</span> 研究ページ・探索管理・可視化</h3>
+        <p>研究紹介ページを追加し、UIサーチの試行回数、採用、棄却、改善率などを見えるようにした。分割数に応じた探索回数や、ランダム初期解とハンガリー初期解の比較も整理した。</p>
+      </li>
+      <li class="item">
+        <h3><span class="tag">PR #10</span> リプレイ機能</h3>
+        <p>UIサーチの採用点をスナップショットとして保存し、初期解からベスト解までを自動再生できるようにした。後で、探索状態を壊さないpreview専用リプレイへ修正する必要があることも分かった。</p>
+      </li>
+      <li class="item">
+        <h3><span class="tag">PR #11</span> YCbCrと色重み探索</h3>
+        <p>探索コストをグレースケールのみから、Y, Cb, Cr に分解した特徴へ拡張。Yを主成分、Cb/Crを補助成分として扱い、λCを候補探索で選ぶプロトタイプを実装した。UIサーチ本体と局所脱出も分離した。</p>
+      </li>
+      <li class="item">
+        <h3><span class="tag">PR #12</span> 色重み探索の説明ページ</h3>
+        <p>λC探索の説明ページを追加。内側でUIサーチ、外側で再構築スコア評価という二段階の考え方を整理した。</p>
+      </li>
+      <li class="item">
+        <h3><span class="tag">今回</span> 定式化のレビューと方針修正</h3>
+        <p>λCを単純に目的関数へ入れると0へ逃げる問題、再構築コストが合成駒コストと同じになりうる問題、再配置変数をUIサーチ本体に混ぜすぎる問題を確認。正則化付きの交互最適化として整理し直した。</p>
+      </li>
+    </ul>
+  </section>
+
+  <section class="card">
+    <h2>途中で分かった注意点</h2>
+    <table>
+      <thead><tr><th>気づき</th><th>対応</th></tr></thead>
+      <tbody>
+        <tr><td>λCを自由に最小化すると、色を無視する λC=0 に逃げる。</td><td>λCの範囲制約、色寄与率の正則化、基準値λ0からのズレ罰則を入れる。</td></tr>
+        <tr><td>合成駒コストと再構築コストが同じ特徴だと、二観点最適化にならない。</td><td>見た目側はブロック特徴、エッジ、隣接連続性など別特徴を見る。</td></tr>
+        <tr><td>再配置変数をUIサーチ本体に混ぜると、問題設定が分かりにくくなる。</td><td>合成駒生成とブロックモデル再配置を二段構成として説明する。</td></tr>
+        <tr><td>リプレイが探索状態を直接変更すると、探索本体が壊れやすい。</td><td>previewDataで表示専用にする。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>次にやること</h2>
+    <ul>
+      <li>デモ本体のλ探索を、単純な候補選択から正則化付きJ評価へ寄せる。</li>
+      <li>π固定でλCを近傍探索するステップを追加し、交互最適化にする。</li>
+      <li>見た目側の B_hat として、ブロック特徴またはエッジ特徴を実装する。</li>
+      <li>ブロックモデル再配置を、UIサーチ本体とは別の補正ステップとして追加する。</li>
+      <li>トップページから説明ページ・進捗日記への導線を追加する。</li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>
