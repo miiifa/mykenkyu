@@ -65,6 +65,10 @@
     .stat{padding:12px;border:1px solid var(--line);border-radius:16px;background:white}
     .stat b{display:block;font-size:20px;line-height:1.25}
     .stat span{color:var(--muted);font-size:13px}
+    .weight-table{width:100%;border-collapse:collapse;margin:8px 0 0;font-size:13px;background:#fff;border-radius:16px;overflow:hidden}
+    .weight-table th,.weight-table td{border-bottom:1px solid var(--line);padding:8px;text-align:right}
+    .weight-table th:first-child,.weight-table td:first-child{text-align:left}
+    .weight-table tr.best-row{background:#ecfbf9;font-weight:900;color:var(--notice-text)}
     .log-details{margin-top:12px;border:1px solid var(--line);border-radius:18px;background:#fff;overflow:hidden}
     .log-details summary{cursor:pointer;font-weight:900;padding:12px 14px;color:var(--text)}
     .log{margin:0;padding:12px 14px;background:#101522;color:#d8e4ff;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;max-height:190px;overflow:auto;white-space:pre-line}
@@ -110,12 +114,12 @@
       <span class="badge">Sliding Block Puzzle × UI Search</span>
       <h1>絵が、パズルとして<br>近づいてくる。</h1>
       <p>卒業研究では2枚の画像をつなぎ、修士研究では3枚以上の画像を同じ駒集合で表現することを目指しました。</p>
-      <div class="quote">UIサーチの採用点を保存し、初期解からUIサーチ後ベスト解までを自動リプレイできます。スライダーで途中状態にも戻れます。</div>
+      <div class="quote">UIサーチ本体を局所最適までの処理として整理し、明るさだけでなく色味の重みもヒューリスティックに探索できます。</div>
     </div>
     <div>
       <h2>改善の見方</h2>
-      <p>採用回数、棄却回数、初期コスト、ベストコスト、改善率を表示します。リプレイは再構築1を基準に流します。</p>
-      <span class="badge">initial</span><span class="badge">accepted snapshots</span><span class="badge">auto replay</span>
+      <p>合成駒の内部ばらつきを下げながら、再構築画像が元画像に近いかで色重みを選びます。リプレイは表示専用なので、探索状態は壊しません。</p>
+      <span class="badge">YCbCr</span><span class="badge">lambda search</span><span class="badge">local optimum</span>
     </div>
   </section>
 
@@ -134,8 +138,9 @@
       <button class="blue" id="templateButton">テンプレ画像</button>
       <button class="orange" id="randomButton">ランダム初期解</button>
       <button class="green" id="buildButton">ハンガリー初期解</button>
+      <button class="blue" id="weightButton">色重みを自動探索</button>
       <button class="green" id="uiSearchButton">UIサーチ実行</button>
-      <button class="light" id="shakeButton">割り当てを少し崩す</button>
+      <button class="light" id="shakeButton">局所脱出して再探索</button>
       <button class="light" id="bestButton">ベストに戻す</button>
       <button class="light" id="shuffleButton">スライドパズル化</button>
       <button class="light" id="solveButton">元の配置</button>
@@ -149,6 +154,13 @@
           <option value="30">30 × 30（簡易greedy）</option>
         </select>
       </label>
+      <label>コストモード
+        <select id="costModeSelect">
+          <option value="gray">グレースケール</option>
+          <option value="colorFixed">カラー補助 固定λ=0.35</option>
+          <option value="colorAuto" selected>カラー重み自動探索</option>
+        </select>
+      </label>
     </div>
 
     <div class="viewer">
@@ -156,7 +168,7 @@
         <div class="canvas-shell"><canvas id="mainCanvas" width="600" height="600" aria-label="パズル描画キャンバス"></canvas></div>
         <div class="replay-panel" aria-label="遷移操作">
           <div class="replay-actions">
-            <button class="blue" id="replayButton">遷移を自動再生</button>
+            <button class="blue" id="replayButton">ベスト更新を自動再生</button>
             <button class="light" id="stopReplayButton">停止</button>
           </div>
           <div class="range-row">
@@ -171,7 +183,9 @@
       <div class="side-card">
         <div class="stats">
           <div class="stat"><b id="gridStat">10×10</b><span>セル分割</span></div>
-          <div class="stat"><b id="methodStat">-</b><span>初期解方式</span></div>
+          <div class="stat"><b id="methodStat">-</b><span>方式</span></div>
+          <div class="stat"><b id="lambdaStat">0.35</b><span>色重み λC</span></div>
+          <div class="stat"><b id="scoreStat">-</b><span>再構築スコア</span></div>
           <div class="stat"><b id="initialCostStat">-</b><span>初期コスト</span></div>
           <div class="stat"><b id="costStat">-</b><span>現在コスト</span></div>
           <div class="stat"><b id="bestCostStat">-</b><span>ベストコスト</span></div>
@@ -179,902 +193,1018 @@
           <div class="stat"><b id="uiStat">0</b><span>UI試行</span></div>
           <div class="stat"><b id="acceptedStat">0</b><span>採用</span></div>
           <div class="stat"><b id="rejectedStat">0</b><span>棄却</span></div>
-          <div class="stat"><b id="shakeStat">0</b><span>崩した回数</span></div>
-          <div class="stat"><b id="visitedStat">000</b><span>visited</span></div>
-          <div class="stat"><b id="pieceStat">100</b><span>合成駒数</span></div>
+          <div class="stat"><b id="localOptStat">0</b><span>局所最適</span></div>
+          <div class="stat"><b id="shakeStat">0</b><span>局所脱出</span></div>
+          <div class="stat"><b id="visitedStat">---</b><span>visited</span></div>
         </div>
-        <div class="notice" id="message">テンプレ画像を読み込み中です。</div>
-        <details class="log-details">
-          <summary>ログを表示</summary>
-          <pre class="log" id="log">log: initializing...</pre>
+        <div id="weightResults"></div>
+        <div class="notice" id="message">テンプレ画像を作成中です。</div>
+        <details class="log-details" open>
+          <summary>処理ログ</summary>
+          <pre class="log" id="log"></pre>
         </details>
       </div>
     </div>
   </section>
 
   <section class="panel">
-    <h2>研究の流れ</h2>
+    <h2>何をしているデモか</h2>
     <div class="steps">
-      <div class="step"><h3>卒論</h3><p>2枚の画像から合成駒を作る。</p></div>
-      <div class="step"><h3>修論</h3><p>3枚以上に拡張し、重心モデル・UIサーチ・ブロックモデルで探索する。</p></div>
-      <div class="step"><h3>Web復元</h3><p>論文・日記・Processingコードを手がかりに再構築する。</p></div>
+      <div class="step"><h3>1. 合成駒を作る</h3><p>各画像から1セルずつ選び、同じスロットのセルをRGB平均して合成駒を作ります。</p></div>
+      <div class="step"><h3>2. UIサーチ</h3><p>1画像だけを動かし、他画像を固定して割当問題にします。改善しなければその画像をvisitedにします。</p></div>
+      <div class="step"><h3>3. 色重み探索</h3><p>複数のλCを試し、最終的な再構築画像のスコアで一番良い重みを採用します。</p></div>
     </div>
   </section>
 </main>
 
 <script>
 (() => {
+  'use strict';
+
   const SIZE = 600;
-  const FEATURE_SIZE = 4;
-  const HUNGARIAN_LIMIT = 225;
   const IMAGE_COUNT = 3;
+  const HUNGARIAN_LIMIT = 225;
+  const EPS = 1e-6;
+  const LAMBDA_CANDIDATES = [0, 0.15, 0.30, 0.45, 0.60, 0.80];
+  const EVAL_WEIGHTS = { y: 1, cb: 0.35, cr: 0.35 };
 
   const canvas = document.getElementById('mainCanvas');
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  const puzzleArea = document.getElementById('puzzleArea');
-  const fileInputs = [0, 1, 2].map((i) => document.getElementById(`file${i}`));
+  const ctx = canvas.getContext('2d');
   const gridSelect = document.getElementById('gridSelect');
-  const tabs = document.getElementById('tabs');
-  const message = document.getElementById('message');
-  const logBox = document.getElementById('log');
+  const costModeSelect = document.getElementById('costModeSelect');
+  const tabsEl = document.getElementById('tabs');
+  const logEl = document.getElementById('log');
+  const messageEl = document.getElementById('message');
   const replaySlider = document.getElementById('replaySlider');
   const replayLabel = document.getElementById('replayLabel');
-  const replayButton = document.getElementById('replayButton');
-  const stopReplayButton = document.getElementById('stopReplayButton');
-  const gridStat = document.getElementById('gridStat');
-  const pieceStat = document.getElementById('pieceStat');
-  const methodStat = document.getElementById('methodStat');
-  const uiStat = document.getElementById('uiStat');
-  const costStat = document.getElementById('costStat');
-  const bestCostStat = document.getElementById('bestCostStat');
-  const visitedStat = document.getElementById('visitedStat');
-  const shakeStat = document.getElementById('shakeStat');
-  const initialCostStat = document.getElementById('initialCostStat');
-  const improveStat = document.getElementById('improveStat');
-  const acceptedStat = document.getElementById('acceptedStat');
-  const rejectedStat = document.getElementById('rejectedStat');
+  const weightResultsEl = document.getElementById('weightResults');
 
-  let images = [null, null, null];
+  const buttons = {
+    template: document.getElementById('templateButton'),
+    random: document.getElementById('randomButton'),
+    build: document.getElementById('buildButton'),
+    weight: document.getElementById('weightButton'),
+    ui: document.getElementById('uiSearchButton'),
+    shake: document.getElementById('shakeButton'),
+    best: document.getElementById('bestButton'),
+    shuffle: document.getElementById('shuffleButton'),
+    solve: document.getElementById('solveButton'),
+    replay: document.getElementById('replayButton'),
+    stopReplay: document.getElementById('stopReplayButton')
+  };
+
+  const stat = {
+    grid: document.getElementById('gridStat'),
+    method: document.getElementById('methodStat'),
+    lambda: document.getElementById('lambdaStat'),
+    score: document.getElementById('scoreStat'),
+    initialCost: document.getElementById('initialCostStat'),
+    cost: document.getElementById('costStat'),
+    bestCost: document.getElementById('bestCostStat'),
+    improve: document.getElementById('improveStat'),
+    ui: document.getElementById('uiStat'),
+    accepted: document.getElementById('acceptedStat'),
+    rejected: document.getElementById('rejectedStat'),
+    localOpt: document.getElementById('localOptStat'),
+    shake: document.getElementById('shakeStat'),
+    visited: document.getElementById('visitedStat')
+  };
+
   let sourceData = [];
   let cells = [];
-  let maps = [[], [], []];
-  let bestMaps = [[], [], []];
+  let maps = null;
+  let bestMaps = null;
   let views = {};
-  let pieces = [];
-  let currentView = 'assigned';
-  let blankIndex = null;
-  let moves = 0;
-  let assignmentMethod = '-';
-  let uiIterations = 0;
-  let currentCost = null;
-  let bestCost = null;
+  let currentView = 'recon1';
+  let previewData = null;
+  let puzzleOrder = null;
   let initialCost = null;
-  let visited = [false, false, false];
+  let bestCost = Infinity;
+  let uiIterations = 0;
+  let accepted = 0;
+  let rejected = 0;
+  let localOptima = 0;
   let shakeCount = 0;
-  let acceptedCount = 0;
-  let rejectedCount = 0;
-  let searching = false;
+  let visited = [false, false, false];
   let snapshots = [];
-  let replayTimer = null;
+  let autoTimer = null;
+  let activeWeights = { y: 1, cb: 0.35, cr: 0.35 };
+  let activeLambda = 0.35;
+  let lastReconScore = null;
+  let weightRows = [];
 
-  const id = (n) => Array.from({ length: n }, (_, i) => i);
-  const cloneMaps = (m) => m.map((a) => a.slice());
-  const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+  const id = n => Array.from({ length: n }, (_, i) => i);
+  const fmt = v => Number.isFinite(v) ? Math.round(v).toLocaleString('ja-JP') : '-';
+  const pct = v => Number.isFinite(v) ? `${v.toFixed(1)}%` : '-';
+  const cloneMap = m => m.slice();
+  const cloneMaps = m => m.map(cloneMap);
 
-  function setMessage(text) {
-    message.textContent = text;
+  function log(line){
+    logEl.textContent = `${new Date().toLocaleTimeString()}  ${line}\n` + logEl.textContent;
   }
 
-  function log(text) {
-    logBox.textContent = (`${text}\n${logBox.textContent}`).split('\n').slice(0, 22).join('\n');
+  function setMessage(text){
+    messageEl.textContent = text;
   }
 
-  function formatCost(value) {
-    if (value === null || value === undefined || Number.isNaN(value)) return '-';
-    if (Math.abs(value) >= 1000000) return `${(value / 1000000).toFixed(2)}M`;
-    if (Math.abs(value) >= 1000) return `${(value / 1000).toFixed(1)}K`;
-    return value.toFixed(0);
+  function setBusy(isBusy){
+    Object.values(buttons).forEach(button => { button.disabled = isBusy; });
+    buttons.stopReplay.disabled = false;
+    replaySlider.disabled = isBusy;
   }
 
-  function searchRounds() {
-    const grid = Number(gridSelect.value);
-    if (grid <= 10) return 200;
-    if (grid <= 12) return 100;
-    if (grid <= 15) return 50;
-    return 20;
+  function rgbToYCbCr(r, g, b){
+    return {
+      y: 0.299 * r + 0.587 * g + 0.114 * b,
+      cb: -0.168736 * r - 0.331264 * g + 0.5 * b + 128,
+      cr: 0.5 * r - 0.418688 * g - 0.081312 * b + 128
+    };
   }
 
-  function shuffled(n) {
-    const a = id(n);
-    for (let i = n - 1; i > 0; i -= 1) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [a[i], a[j]] = [a[j], a[i]];
+  function squaredVectorDistance(a, b){
+    let sum = 0;
+    for(let i = 0; i < a.length; i++){
+      const d = a[i] - b[i];
+      sum += d * d;
     }
-    return a;
+    return sum / a.length;
   }
 
-  function setButtons(enabled) {
-    document.querySelectorAll('button').forEach((button) => {
-      button.disabled = !enabled;
-    });
-    stopReplayButton.disabled = false;
-  }
-
-  function stopReplay() {
-    if (replayTimer) {
-      clearInterval(replayTimer);
-      replayTimer = null;
+  function meanFeature(features, key){
+    const len = features[0][key].length;
+    const mean = Array(len).fill(0);
+    for(const feature of features){
+      for(let i = 0; i < len; i++) mean[i] += feature[key][i];
     }
-    replayButton.textContent = '遷移を自動再生';
+    for(let i = 0; i < len; i++) mean[i] /= features.length;
+    return mean;
   }
 
-  function updateReplaySlider() {
-    replaySlider.max = String(Math.max(0, snapshots.length - 1));
-    replaySlider.value = String(Math.max(0, snapshots.length - 1));
+  function meanSyntheticFeature(slot, mapSet){
+    const features = [];
+    for(let img = 0; img < IMAGE_COUNT; img++){
+      features.push(cells[img][mapSet[img][slot]].feature);
+    }
+    return {
+      y: meanFeature(features, 'y'),
+      cb: meanFeature(features, 'cb'),
+      cr: meanFeature(features, 'cr')
+    };
   }
 
-  function captureSnapshot(label, cost, iter) {
-    snapshots.push({ label, cost, iter, maps: cloneMaps(maps) });
-    updateReplaySlider();
+  function costFromFeatures(features, weights = activeWeights){
+    const yMean = meanFeature(features, 'y');
+    const cbMean = meanFeature(features, 'cb');
+    const crMean = meanFeature(features, 'cr');
+    let yCost = 0;
+    let cbCost = 0;
+    let crCost = 0;
+    for(const feature of features){
+      yCost += squaredVectorDistance(feature.y, yMean);
+      cbCost += squaredVectorDistance(feature.cb, cbMean);
+      crCost += squaredVectorDistance(feature.cr, crMean);
+    }
+    return weights.y * yCost + weights.cb * cbCost + weights.cr * crCost;
   }
 
-  function renderSnapshot(index, options = {}) {
-    if (!snapshots.length) return;
-    if (!options.fromPlayback) stopReplay();
-    const i = Math.max(0, Math.min(Number(index), snapshots.length - 1));
-    const snapshot = snapshots[i];
-    maps = cloneMaps(snapshot.maps);
-    rebuildViews(false);
+  function syntheticCost(slot, mapSet = maps, weights = activeWeights){
+    const features = [];
+    for(let img = 0; img < IMAGE_COUNT; img++){
+      features.push(cells[img][mapSet[img][slot]].feature);
+    }
+    return costFromFeatures(features, weights);
+  }
+
+  function totalCost(mapSet = maps, weights = activeWeights){
+    if(!mapSet || !cells.length) return Infinity;
+    const n = mapSet[0].length;
+    let sum = 0;
+    for(let slot = 0; slot < n; slot++) sum += syntheticCost(slot, mapSet, weights);
+    return sum;
+  }
+
+  function reconstructionScore(mapSet, weights = EVAL_WEIGHTS){
+    if(!mapSet || !cells.length) return Infinity;
+    const n = mapSet[0].length;
+    let score = 0;
+    for(let slot = 0; slot < n; slot++){
+      const synthetic = meanSyntheticFeature(slot, mapSet);
+      for(let img = 0; img < IMAGE_COUNT; img++){
+        const original = cells[img][mapSet[img][slot]].feature;
+        score += weights.y * squaredVectorDistance(original.y, synthetic.y);
+        score += weights.cb * squaredVectorDistance(original.cb, synthetic.cb);
+        score += weights.cr * squaredVectorDistance(original.cr, synthetic.cr);
+      }
+    }
+    return score;
+  }
+
+  function updateWeightsFromMode(){
+    const mode = costModeSelect.value;
+    if(mode === 'gray'){
+      activeLambda = 0;
+      activeWeights = { y: 1, cb: 0, cr: 0 };
+    }else if(mode === 'colorFixed'){
+      activeLambda = 0.35;
+      activeWeights = { y: 1, cb: 0.35, cr: 0.35 };
+    }else{
+      activeWeights = { y: 1, cb: activeLambda, cr: activeLambda };
+    }
+    if(maps){
+      bestCost = totalCost(bestMaps || maps, activeWeights);
+      lastReconScore = reconstructionScore(bestMaps || maps);
+      setStats();
+    }
+  }
+
+  function resetSearchState(method){
+    uiIterations = 0;
+    accepted = 0;
+    rejected = 0;
+    localOptima = 0;
+    shakeCount = 0;
+    visited = [false, false, false];
+    snapshots = [];
+    previewData = null;
     currentView = 'recon1';
-    resetPieces(false);
-    render();
-    replaySlider.value = String(i);
-    replayLabel.textContent = `遷移 ${i + 1}/${snapshots.length}: ${snapshot.label} / iter ${snapshot.iter} / cost ${formatCost(snapshot.cost)}`;
+    puzzleOrder = null;
+    stat.method.textContent = method;
+    initialCost = totalCost(maps, activeWeights);
+    bestCost = initialCost;
+    bestMaps = cloneMaps(maps);
+    lastReconScore = reconstructionScore(bestMaps);
+    captureSnapshot('初期解', bestCost, bestMaps, true);
+    rebuildViews();
+    setStats();
   }
 
-  function autoReplay() {
-    if (!snapshots.length) {
-      setMessage('先にUIサーチを実行してください。');
+  function setStats(){
+    const grid = Number(gridSelect.value);
+    const current = maps ? totalCost(maps, activeWeights) : Infinity;
+    const improve = initialCost && Number.isFinite(bestCost) ? (initialCost - bestCost) / initialCost * 100 : NaN;
+    stat.grid.textContent = `${grid}×${grid}`;
+    stat.lambda.textContent = activeLambda.toFixed(2);
+    stat.score.textContent = fmt(lastReconScore);
+    stat.initialCost.textContent = fmt(initialCost);
+    stat.cost.textContent = fmt(current);
+    stat.bestCost.textContent = fmt(bestCost);
+    stat.improve.textContent = pct(improve);
+    stat.ui.textContent = uiIterations.toLocaleString('ja-JP');
+    stat.accepted.textContent = accepted.toLocaleString('ja-JP');
+    stat.rejected.textContent = rejected.toLocaleString('ja-JP');
+    stat.localOpt.textContent = localOptima.toLocaleString('ja-JP');
+    stat.shake.textContent = shakeCount.toLocaleString('ja-JP');
+    stat.visited.textContent = visited.map(v => v ? '1' : '0').join('');
+  }
+
+  function renderWeightRows(){
+    if(!weightRows.length){
+      weightResultsEl.innerHTML = '';
       return;
     }
+    const rows = weightRows.map(row => `<tr class="${row.best ? 'best-row' : ''}"><td>λ=${row.lambda.toFixed(2)}</td><td>${fmt(row.score)}</td><td>${fmt(row.cost)}</td><td>${row.local ? '局所' : '途中'}</td></tr>`).join('');
+    weightResultsEl.innerHTML = `<h3>重み探索結果</h3><table class="weight-table"><thead><tr><th>候補</th><th>再構築</th><th>合成駒</th><th>状態</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }
+
+  function makeTabs(){
+    const tabs = [
+      ['recon1', '再構築1'],
+      ['recon2', '再構築2'],
+      ['recon3', '再構築3'],
+      ['assigned', '探索スロット順'],
+      ['preview', '遷移プレビュー'],
+      ['source1', '元画像1'],
+      ['source2', '元画像2'],
+      ['source3', '元画像3']
+    ];
+    tabsEl.innerHTML = '';
+    for(const [key, label] of tabs){
+      const button = document.createElement('button');
+      button.className = `tab ${currentView === key ? 'active' : ''}`;
+      button.textContent = label;
+      button.addEventListener('click', () => {
+        if(key === 'preview' && !previewData){
+          setMessage('まだ遷移プレビューがありません。スライダーか自動再生を使ってください。');
+          return;
+        }
+        currentView = key;
+        puzzleOrder = null;
+        makeTabs();
+        render();
+      });
+      tabsEl.appendChild(button);
+    }
+  }
+
+  function dataForView(){
+    if(currentView === 'preview') return previewData || views.recon1 || sourceData[0];
+    return views[currentView] || views.recon1 || sourceData[0];
+  }
+
+  function render(){
+    if(puzzleOrder && views.assigned){
+      renderPuzzle();
+      return;
+    }
+    const data = dataForView();
+    if(data) ctx.putImageData(data, 0, 0);
+  }
+
+  function renderPuzzle(){
+    const grid = Number(gridSelect.value);
+    const cellSize = SIZE / grid;
+    const base = views.assigned;
+    const out = ctx.createImageData(SIZE, SIZE);
+    for(let dst = 0; dst < puzzleOrder.length; dst++){
+      const src = puzzleOrder[dst];
+      if(src < 0) continue;
+      copyCellFromImageData(base, out, src, dst, grid, cellSize);
+    }
+    ctx.putImageData(out, 0, 0);
+  }
+
+  function copyCellFromImageData(srcData, dstData, srcCell, dstCell, grid, cellSize){
+    const sx0 = (srcCell % grid) * cellSize;
+    const sy0 = Math.floor(srcCell / grid) * cellSize;
+    const dx0 = (dstCell % grid) * cellSize;
+    const dy0 = Math.floor(dstCell / grid) * cellSize;
+    for(let y = 0; y < cellSize; y++){
+      for(let x = 0; x < cellSize; x++){
+        const si = ((sy0 + y) * SIZE + (sx0 + x)) * 4;
+        const di = ((dy0 + y) * SIZE + (dx0 + x)) * 4;
+        dstData.data[di] = srcData.data[si];
+        dstData.data[di + 1] = srcData.data[si + 1];
+        dstData.data[di + 2] = srcData.data[si + 2];
+        dstData.data[di + 3] = 255;
+      }
+    }
+  }
+
+  function captureSnapshot(label, cost, mapSet, force = false){
+    const snapshotMaps = cloneMaps(mapSet);
+    if(!force && snapshots.length && sameMaps(snapshots[snapshots.length - 1].maps, snapshotMaps)) return;
+    snapshots.push({
+      label,
+      cost,
+      iter: uiIterations,
+      lambda: activeLambda,
+      maps: snapshotMaps
+    });
+    replaySlider.max = String(Math.max(0, snapshots.length - 1));
+    replaySlider.value = String(snapshots.length - 1);
+    replayLabel.textContent = `遷移: ${label} / cost ${fmt(cost)} / ${snapshots.length}件`;
+  }
+
+  function sameMaps(a, b){
+    if(!a || !b) return false;
+    for(let i = 0; i < a.length; i++){
+      for(let j = 0; j < a[i].length; j++) if(a[i][j] !== b[i][j]) return false;
+    }
+    return true;
+  }
+
+  function renderSnapshot(index){
+    const snapshot = snapshots[index];
+    if(!snapshot) return;
+    previewData = buildViewsFromMaps(snapshot.maps).recon1;
+    currentView = 'preview';
+    replaySlider.value = String(index);
+    replayLabel.textContent = `遷移: ${index + 1}/${snapshots.length} ${snapshot.label} / cost ${fmt(snapshot.cost)} / λ=${snapshot.lambda.toFixed(2)}`;
+    makeTabs();
+    render();
+  }
+
+  async function autoReplay(){
     stopReplay();
-    puzzleArea.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    let i = 0;
-    replayButton.textContent = '再生中...';
-    renderSnapshot(0, { fromPlayback: true });
-    replayTimer = setInterval(() => {
-      i += 1;
-      if (i >= snapshots.length) {
+    if(snapshots.length < 1){
+      setMessage('リプレイするスナップショットがありません。初期解かUIサーチを実行してください。');
+      return;
+    }
+    buttons.replay.disabled = true;
+    let index = 0;
+    renderSnapshot(index);
+    autoTimer = setInterval(() => {
+      index += 1;
+      if(index >= snapshots.length){
         stopReplay();
         return;
       }
-      renderSnapshot(i, { fromPlayback: true });
+      renderSnapshot(index);
     }, 650);
   }
 
-  function templateImage(kind) {
-    const c = document.createElement('canvas');
-    c.width = SIZE;
-    c.height = SIZE;
-    const g = c.getContext('2d');
-    g.fillStyle = 'white';
-    g.fillRect(0, 0, SIZE, SIZE);
+  function stopReplay(){
+    if(autoTimer) clearInterval(autoTimer);
+    autoTimer = null;
+    buttons.replay.disabled = false;
+  }
 
-    if (kind === 0) {
-      const bg = g.createLinearGradient(0, 0, SIZE, SIZE);
-      bg.addColorStop(0, '#2b234a');
-      bg.addColorStop(0.5, '#f6c35b');
-      bg.addColorStop(1, '#f5efe6');
-      g.fillStyle = bg;
-      g.fillRect(0, 0, SIZE, SIZE);
-      g.fillStyle = 'rgba(20,18,32,.58)';
-      g.beginPath();
-      g.ellipse(300, 330, 130, 190, 0, 0, Math.PI * 2);
-      g.fill();
-      g.fillStyle = 'rgba(255,227,160,.9)';
-      g.beginPath();
-      g.ellipse(300, 250, 74, 94, 0, 0, Math.PI * 2);
-      g.fill();
-      g.fillStyle = '#30253b';
-      g.fillRect(232, 214, 136, 22);
+  function createBlankMaps(){
+    const n = Number(gridSelect.value) ** 2;
+    return [id(n), id(n), id(n)];
+  }
+
+  function shuffleArray(arr){
+    for(let i = arr.length - 1; i > 0; i--){
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
     }
+    return arr;
+  }
 
-    if (kind === 1) {
-      const bg = g.createLinearGradient(0, 0, SIZE, SIZE);
-      bg.addColorStop(0, '#071b4b');
-      bg.addColorStop(0.55, '#1847a0');
-      bg.addColorStop(1, '#e8c15d');
-      g.fillStyle = bg;
-      g.fillRect(0, 0, SIZE, SIZE);
-      for (let i = 0; i < 70; i += 1) {
-        const x = (i * 97) % SIZE;
-        const y = 30 + ((i * 53) % 360);
-        g.fillStyle = `rgba(255,255,210,${0.35 + (i % 7) * 0.08})`;
-        g.beginPath();
-        g.arc(x, y, 2 + (i % 4), 0, Math.PI * 2);
-        g.fill();
+  function createRandomMaps(){
+    const n = Number(gridSelect.value) ** 2;
+    return [id(n), shuffleArray(id(n)), shuffleArray(id(n))];
+  }
+
+  function generateTemplates(){
+    sourceData = [];
+    for(let i = 0; i < IMAGE_COUNT; i++){
+      const off = document.createElement('canvas');
+      off.width = SIZE;
+      off.height = SIZE;
+      const c = off.getContext('2d');
+      const gradient = c.createLinearGradient(0, 0, SIZE, SIZE);
+      if(i === 0){
+        gradient.addColorStop(0, '#fff0d7');
+        gradient.addColorStop(1, '#f06a6a');
+      }else if(i === 1){
+        gradient.addColorStop(0, '#d9fff8');
+        gradient.addColorStop(1, '#4967ff');
+      }else{
+        gradient.addColorStop(0, '#f5ffe0');
+        gradient.addColorStop(1, '#23b26d');
       }
-      g.fillStyle = '#101a2f';
-      g.beginPath();
-      g.moveTo(0, 510);
-      for (let x = 0; x <= SIZE; x += 40) g.lineTo(x, 450 + Math.sin(x / 55) * 35);
-      g.lineTo(SIZE, SIZE);
-      g.lineTo(0, SIZE);
-      g.fill();
-    }
-
-    if (kind === 2) {
-      const bg = g.createLinearGradient(0, 0, SIZE, SIZE);
-      bg.addColorStop(0, '#dff8ff');
-      bg.addColorStop(0.48, '#2f8fc7');
-      bg.addColorStop(1, '#10234f');
-      g.fillStyle = bg;
-      g.fillRect(0, 0, SIZE, SIZE);
-      for (let wave = 0; wave < 7; wave += 1) {
-        g.fillStyle = wave % 2 ? '#1f6b9f' : '#f7f3e8';
-        g.beginPath();
-        const y = 160 + wave * 52;
-        g.moveTo(0, y);
-        for (let x = 0; x <= SIZE; x += 24) {
-          g.quadraticCurveTo(x + 12, y - 40, x + 24, y + Math.sin(x / 30 + wave) * 22);
+      c.fillStyle = gradient;
+      c.fillRect(0, 0, SIZE, SIZE);
+      c.globalAlpha = 0.8;
+      for(let j = 0; j < 9; j++){
+        c.beginPath();
+        const x = 80 + ((j * 137 + i * 53) % 440);
+        const y = 90 + ((j * 89 + i * 97) % 420);
+        const r = 28 + ((j * 17 + i * 23) % 72);
+        c.fillStyle = ['#ffffff', '#20263c', '#ffd447', '#ff6ad5', '#7cf7c9'][(j + i) % 5];
+        if((j + i) % 2 === 0){
+          c.arc(x, y, r, 0, Math.PI * 2);
+          c.fill();
+        }else{
+          c.save();
+          c.translate(x, y);
+          c.rotate((j + i) * 0.33);
+          c.fillRect(-r, -r * 0.55, r * 2, r * 1.1);
+          c.restore();
         }
-        g.lineTo(SIZE, y + 70);
-        g.lineTo(0, y + 70);
-        g.fill();
       }
+      c.globalAlpha = 1;
+      c.font = '900 86px system-ui, sans-serif';
+      c.fillStyle = 'rgba(255,255,255,.68)';
+      c.fillText(`Image ${i + 1}`, 70, 520);
+      sourceData.push(c.getImageData(0, 0, SIZE, SIZE));
     }
-
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => resolve(img);
-      img.src = c.toDataURL('image/png');
-    });
+    afterImagesChanged('テンプレ画像');
   }
 
-  async function loadTemplates() {
-    images = await Promise.all([0, 1, 2].map(templateImage));
-    fileInputs.forEach((input) => { input.value = ''; });
-    build('hungarian', 'テンプレ画像3枚を読み込み、ハンガリー初期解を計算しました。');
-  }
-
-  function imageToData(img) {
+  async function loadFileIntoImage(index, file){
+    const bitmap = await createImageBitmap(file);
     const off = document.createElement('canvas');
     off.width = SIZE;
     off.height = SIZE;
-    const g = off.getContext('2d', { willReadFrequently: true });
-    g.fillStyle = 'white';
-    g.fillRect(0, 0, SIZE, SIZE);
-    const scale = Math.max(SIZE / img.width, SIZE / img.height);
-    const w = img.width * scale;
-    const h = img.height * scale;
-    g.drawImage(img, (SIZE - w) / 2, (SIZE - h) / 2, w, h);
-    return g.getImageData(0, 0, SIZE, SIZE);
+    const c = off.getContext('2d');
+    c.fillStyle = '#fff';
+    c.fillRect(0, 0, SIZE, SIZE);
+    const scale = Math.max(SIZE / bitmap.width, SIZE / bitmap.height);
+    const w = bitmap.width * scale;
+    const h = bitmap.height * scale;
+    c.drawImage(bitmap, (SIZE - w) / 2, (SIZE - h) / 2, w, h);
+    sourceData[index] = c.getImageData(0, 0, SIZE, SIZE);
+    if(sourceData.filter(Boolean).length === IMAGE_COUNT) afterImagesChanged(`画像${index + 1}を読込`);
   }
 
-  function gray(r, g, b) {
-    return 0.299 * r + 0.587 * g + 0.114 * b;
+  function afterImagesChanged(method){
+    splitAllImages();
+    maps = createBlankMaps();
+    resetSearchState(method);
+    setMessage('画像をセルに分割しました。初期解を選ぶか、色重みを自動探索できます。');
+    log(`${method}: ${Number(gridSelect.value)}×${Number(gridSelect.value)} に分割`);
+    render();
   }
 
-  function extractCells(data, grid) {
+  function splitAllImages(){
+    const grid = Number(gridSelect.value);
+    cells = sourceData.map(data => splitImageIntoCells(data, grid));
+  }
+
+  function splitImageIntoCells(imageData, grid){
     const cellSize = SIZE / grid;
     const result = [];
-    for (let ci = 0; ci < grid * grid; ci += 1) {
-      const cx = ci % grid;
-      const cy = Math.floor(ci / grid);
-      const sx = Math.floor(cx * cellSize);
-      const sy = Math.floor(cy * cellSize);
-      const rgba = new Uint8ClampedArray(cellSize * cellSize * 4);
-      const sums = Array(FEATURE_SIZE * FEATURE_SIZE).fill(0);
-      const counts = Array(FEATURE_SIZE * FEATURE_SIZE).fill(0);
-      let out = 0;
-      for (let y = 0; y < cellSize; y += 1) {
-        for (let x = 0; x < cellSize; x += 1) {
-          const src = ((sy + y) * SIZE + (sx + x)) * 4;
-          const r = data.data[src];
-          const g = data.data[src + 1];
-          const b = data.data[src + 2];
-          const a = data.data[src + 3];
-          rgba[out] = r;
-          rgba[out + 1] = g;
-          rgba[out + 2] = b;
-          rgba[out + 3] = a;
-          out += 4;
-          const bx = Math.min(FEATURE_SIZE - 1, Math.floor((x / cellSize) * FEATURE_SIZE));
-          const by = Math.min(FEATURE_SIZE - 1, Math.floor((y / cellSize) * FEATURE_SIZE));
-          const bi = by * FEATURE_SIZE + bx;
-          sums[bi] += gray(r, g, b);
-          counts[bi] += 1;
+    for(let cy = 0; cy < grid; cy++){
+      for(let cx = 0; cx < grid; cx++){
+        const rgba = new Uint8ClampedArray(cellSize * cellSize * 4);
+        const yBins = Array(16).fill(0);
+        const cbBins = Array(4).fill(0);
+        const crBins = Array(4).fill(0);
+        const yCounts = Array(16).fill(0);
+        const cCounts = Array(4).fill(0);
+        for(let y = 0; y < cellSize; y++){
+          for(let x = 0; x < cellSize; x++){
+            const sx = cx * cellSize + x;
+            const sy = cy * cellSize + y;
+            const si = (sy * SIZE + sx) * 4;
+            const di = (y * cellSize + x) * 4;
+            const r = imageData.data[si];
+            const g = imageData.data[si + 1];
+            const b = imageData.data[si + 2];
+            rgba[di] = r;
+            rgba[di + 1] = g;
+            rgba[di + 2] = b;
+            rgba[di + 3] = 255;
+            const ycc = rgbToYCbCr(r, g, b);
+            const ybx = Math.min(3, Math.floor(x / cellSize * 4));
+            const yby = Math.min(3, Math.floor(y / cellSize * 4));
+            const cbx = Math.min(1, Math.floor(x / cellSize * 2));
+            const cby = Math.min(1, Math.floor(y / cellSize * 2));
+            const yi = yby * 4 + ybx;
+            const ci = cby * 2 + cbx;
+            yBins[yi] += ycc.y;
+            cbBins[ci] += ycc.cb;
+            crBins[ci] += ycc.cr;
+            yCounts[yi] += 1;
+            cCounts[ci] += 1;
+          }
         }
+        for(let i = 0; i < 16; i++) yBins[i] /= Math.max(1, yCounts[i]);
+        for(let i = 0; i < 4; i++){
+          cbBins[i] /= Math.max(1, cCounts[i]);
+          crBins[i] /= Math.max(1, cCounts[i]);
+        }
+        result.push({ rgba, feature: { y: yBins, cb: cbBins, cr: crBins } });
       }
-      result.push({ rgba, vector: sums.map((s, i) => s / Math.max(1, counts[i])) });
     }
     return result;
   }
 
-  function sq(a, b) {
-    let sum = 0;
-    for (let i = 0; i < a.length; i += 1) {
-      const d = a[i] - b[i];
-      sum += d * d;
-    }
-    return sum;
-  }
-
-  function syntheticCost(vectors) {
-    const avg = Array(vectors[0].length).fill(0);
-    for (const vec of vectors) {
-      for (let i = 0; i < avg.length; i += 1) avg[i] += vec[i];
-    }
-    for (let i = 0; i < avg.length; i += 1) avg[i] /= vectors.length;
-    let cost = 0;
-    for (const vec of vectors) cost += sq(vec, avg);
-    return cost;
-  }
-
-  function slotVectors(slot) {
-    return maps.map((map, img) => cells[img][map[slot]].vector);
-  }
-
-  function totalCost() {
-    let cost = 0;
-    for (let s = 0; s < maps[0].length; s += 1) cost += syntheticCost(slotVectors(s));
-    return cost;
-  }
-
-  function costMatrixForImage(target, fixedImages) {
-    const n = maps[0].length;
-    const cost = Array.from({ length: n }, () => Array(n));
-    for (let s = 0; s < n; s += 1) {
-      const fixed = fixedImages.map((img) => cells[img][maps[img][s]].vector);
-      for (let j = 0; j < n; j += 1) {
-        cost[s][j] = syntheticCost([...fixed, cells[target][j].vector]);
+  function mergeCells(cellList){
+    const len = cellList[0].rgba.length;
+    const out = new Uint8ClampedArray(len);
+    for(let i = 0; i < len; i += 4){
+      let r = 0, g = 0, b = 0;
+      for(const cell of cellList){
+        r += cell.rgba[i];
+        g += cell.rgba[i + 1];
+        b += cell.rgba[i + 2];
       }
-    }
-    return cost;
-  }
-
-  function hungarian(cost) {
-    const n = cost.length;
-    const m = cost[0].length;
-    const u = Array(n + 1).fill(0);
-    const v = Array(m + 1).fill(0);
-    const p = Array(m + 1).fill(0);
-    const way = Array(m + 1).fill(0);
-    for (let i = 1; i <= n; i += 1) {
-      p[0] = i;
-      let j0 = 0;
-      const minv = Array(m + 1).fill(Infinity);
-      const used = Array(m + 1).fill(false);
-      do {
-        used[j0] = true;
-        const i0 = p[j0];
-        let delta = Infinity;
-        let j1 = 0;
-        for (let j = 1; j <= m; j += 1) {
-          if (!used[j]) {
-            const cur = cost[i0 - 1][j - 1] - u[i0] - v[j];
-            if (cur < minv[j]) {
-              minv[j] = cur;
-              way[j] = j0;
-            }
-            if (minv[j] < delta) {
-              delta = minv[j];
-              j1 = j;
-            }
-          }
-        }
-        for (let j = 0; j <= m; j += 1) {
-          if (used[j]) {
-            u[p[j]] += delta;
-            v[j] -= delta;
-          } else {
-            minv[j] -= delta;
-          }
-        }
-        j0 = j1;
-      } while (p[j0] !== 0);
-      do {
-        const j1 = way[j0];
-        p[j0] = p[j1];
-        j0 = j1;
-      } while (j0 !== 0);
-    }
-    const ans = Array(n);
-    for (let j = 1; j <= m; j += 1) {
-      if (p[j] > 0) ans[p[j] - 1] = j - 1;
-    }
-    return ans;
-  }
-
-  function greedy(cost) {
-    const n = cost.length;
-    const used = Array(n).fill(false);
-    const assign = Array(n);
-    for (let i = 0; i < n; i += 1) {
-      let best = -1;
-      let bestCost = Infinity;
-      for (let j = 0; j < n; j += 1) {
-        if (!used[j] && cost[i][j] < bestCost) {
-          bestCost = cost[i][j];
-          best = j;
-        }
-      }
-      assign[i] = best;
-      used[best] = true;
-    }
-    return assign;
-  }
-
-  function solve(cost) {
-    return cost.length <= HUNGARIAN_LIMIT ? hungarian(cost) : greedy(cost);
-  }
-
-  function mergeCells(list) {
-    const out = new Uint8ClampedArray(list[0].length);
-    for (let i = 0; i < out.length; i += 4) {
-      out[i] = Math.round(list.reduce((s, c) => s + c[i], 0) / list.length);
-      out[i + 1] = Math.round(list.reduce((s, c) => s + c[i + 1], 0) / list.length);
-      out[i + 2] = Math.round(list.reduce((s, c) => s + c[i + 2], 0) / list.length);
+      out[i] = Math.round(r / cellList.length);
+      out[i + 1] = Math.round(g / cellList.length);
+      out[i + 2] = Math.round(b / cellList.length);
       out[i + 3] = 255;
     }
     return out;
   }
 
-  function putCell(img, rgba, target, grid) {
-    const cell = SIZE / grid;
-    const tx = (target % grid) * cell;
-    const ty = Math.floor(target / grid) * cell;
-    let src = 0;
-    for (let y = 0; y < cell; y += 1) {
-      for (let x = 0; x < cell; x += 1) {
-        const dst = ((ty + y) * SIZE + (tx + x)) * 4;
-        img.data[dst] = rgba[src];
-        img.data[dst + 1] = rgba[src + 1];
-        img.data[dst + 2] = rgba[src + 2];
-        img.data[dst + 3] = rgba[src + 3];
-        src += 4;
-      }
+  function buildSyntheticPieces(mapSet){
+    const n = mapSet[0].length;
+    const pieces = [];
+    for(let slot = 0; slot < n; slot++){
+      pieces.push(mergeCells([0, 1, 2].map(img => cells[img][mapSet[img][slot]])));
     }
+    return pieces;
   }
 
-  function imageFromPieces(pieceList, placement, grid) {
+  function imageFromPieces(pieces, placement, grid){
+    const cellSize = SIZE / grid;
     const out = ctx.createImageData(SIZE, SIZE);
-    for (let i = 0; i < pieceList.length; i += 1) putCell(out, pieceList[i], placement[i], grid);
+    for(let slot = 0; slot < pieces.length; slot++){
+      const dst = placement[slot];
+      const dx0 = (dst % grid) * cellSize;
+      const dy0 = Math.floor(dst / grid) * cellSize;
+      const piece = pieces[slot];
+      for(let y = 0; y < cellSize; y++){
+        for(let x = 0; x < cellSize; x++){
+          const si = (y * cellSize + x) * 4;
+          const di = ((dy0 + y) * SIZE + (dx0 + x)) * 4;
+          out.data[di] = piece[si];
+          out.data[di + 1] = piece[si + 1];
+          out.data[di + 2] = piece[si + 2];
+          out.data[di + 3] = 255;
+        }
+      }
+    }
     return out;
   }
 
-  function rebuildViews(updateBest = true) {
+  function buildViewsFromMaps(mapSet){
     const grid = Number(gridSelect.value);
     const n = grid * grid;
-    const identity = id(n);
-    const assigned = Array.from({ length: n }, (_, s) => mergeCells([0, 1, 2].map((img) => cells[img][maps[img][s]].rgba)));
-    const naive = Array.from({ length: n }, (_, s) => mergeCells([cells[0][s].rgba, cells[1][s].rgba, cells[2][s].rgba]));
-    views = {
-      assigned: imageFromPieces(assigned, identity, grid),
-      naive: imageFromPieces(naive, identity, grid),
-      recon1: imageFromPieces(assigned, maps[0], grid),
-      recon2: imageFromPieces(assigned, maps[1], grid),
-      recon3: imageFromPieces(assigned, maps[2], grid),
+    const pieces = buildSyntheticPieces(mapSet);
+    return {
+      assigned: imageFromPieces(pieces, id(n), grid),
+      recon1: imageFromPieces(pieces, mapSet[0], grid),
+      recon2: imageFromPieces(pieces, mapSet[1], grid),
+      recon3: imageFromPieces(pieces, mapSet[2], grid),
       source1: sourceData[0],
       source2: sourceData[1],
       source3: sourceData[2]
     };
-    currentCost = totalCost();
-    if (updateBest && (bestCost === null || currentCost < bestCost)) {
-      bestCost = currentCost;
-      bestMaps = cloneMaps(maps);
-      log(`best: ${formatCost(bestCost)}`);
+  }
+
+  function rebuildViews(){
+    if(!maps) return;
+    views = buildViewsFromMaps(maps);
+    makeTabs();
+    render();
+  }
+
+  function costMatrixForImageWithMaps(target, mapSet, weights){
+    const n = mapSet[0].length;
+    const matrix = Array.from({ length: n }, () => Array(n).fill(0));
+    for(let slot = 0; slot < n; slot++){
+      const fixedFeatures = [];
+      for(let img = 0; img < IMAGE_COUNT; img++){
+        if(img !== target) fixedFeatures.push(cells[img][mapSet[img][slot]].feature);
+      }
+      for(let piece = 0; piece < n; piece++){
+        const features = fixedFeatures.concat(cells[target][piece].feature);
+        matrix[slot][piece] = costFromFeatures(features, weights);
+      }
     }
+    return matrix;
   }
 
-  function initialAssignment(mode = 'hungarian') {
-    stopReplay();
-    const grid = Number(gridSelect.value);
-    const n = grid * grid;
-    sourceData = images.map(imageToData);
-    cells = sourceData.map((data) => extractCells(data, grid));
-    if (mode === 'random') {
-      maps = [id(n), shuffled(n), shuffled(n)];
-      assignmentMethod = 'Random';
-    } else {
-      maps = [id(n), id(n), id(n)];
-      maps[1] = solve(costMatrixForImage(1, [0]));
-      maps[2] = solve(costMatrixForImage(2, [0, 1]));
-      assignmentMethod = n <= HUNGARIAN_LIMIT ? 'Hungarian' : 'Greedy';
+  function solveAssignment(matrix){
+    const n = matrix.length;
+    if(n <= HUNGARIAN_LIMIT) return hungarian(matrix);
+    return greedyAssignment(matrix);
+  }
+
+  function greedyAssignment(matrix){
+    const n = matrix.length;
+    const used = Array(n).fill(false);
+    const assignment = Array(n).fill(0);
+    const order = matrix.map((row, i) => {
+      const sorted = row.slice().sort((a, b) => a - b);
+      return { i, margin: (sorted[1] || sorted[0]) - sorted[0] };
+    }).sort((a, b) => b.margin - a.margin);
+    for(const { i } of order){
+      let best = -1;
+      let bestCostValue = Infinity;
+      for(let j = 0; j < n; j++){
+        if(!used[j] && matrix[i][j] < bestCostValue){
+          bestCostValue = matrix[i][j];
+          best = j;
+        }
+      }
+      assignment[i] = best;
+      used[best] = true;
     }
-    uiIterations = 0;
-    visited = [false, false, false];
-    shakeCount = 0;
-    acceptedCount = 0;
-    rejectedCount = 0;
-    bestCost = null;
-    initialCost = null;
-    snapshots = [];
-    logBox.textContent = `log: ${assignmentMethod} initial`;
-    rebuildViews();
-    initialCost = currentCost;
-    bestCost = currentCost;
-    bestMaps = cloneMaps(maps);
-    captureSnapshot('初期解', currentCost, 0);
-    replayLabel.textContent = `遷移 1/1: 初期解 / cost ${formatCost(currentCost)}`;
-    log(`initial cost: ${formatCost(initialCost)}`);
+    return assignment;
   }
 
-  function chooseTarget() {
-    const pool = visited.map((v, i) => (v ? null : i)).filter((v) => v !== null);
-    const p = pool.length ? pool : [0, 1, 2];
-    return p[Math.floor(Math.random() * p.length)];
+  function hungarian(a){
+    const n = a.length;
+    const m = a[0].length;
+    const u = Array(n + 1).fill(0);
+    const v = Array(m + 1).fill(0);
+    const p = Array(m + 1).fill(0);
+    const way = Array(m + 1).fill(0);
+    for(let i = 1; i <= n; i++){
+      p[0] = i;
+      let j0 = 0;
+      const minv = Array(m + 1).fill(Infinity);
+      const used = Array(m + 1).fill(false);
+      do{
+        used[j0] = true;
+        const i0 = p[j0];
+        let delta = Infinity;
+        let j1 = 0;
+        for(let j = 1; j <= m; j++){
+          if(used[j]) continue;
+          const cur = a[i0 - 1][j - 1] - u[i0] - v[j];
+          if(cur < minv[j]){
+            minv[j] = cur;
+            way[j] = j0;
+          }
+          if(minv[j] < delta){
+            delta = minv[j];
+            j1 = j;
+          }
+        }
+        for(let j = 0; j <= m; j++){
+          if(used[j]){
+            u[p[j]] += delta;
+            v[j] -= delta;
+          }else{
+            minv[j] -= delta;
+          }
+        }
+        j0 = j1;
+      }while(p[j0] !== 0);
+      do{
+        const j1 = way[j0];
+        p[j0] = p[j1];
+        j0 = j1;
+      }while(j0 !== 0);
+    }
+    const assignment = Array(n).fill(0);
+    for(let j = 1; j <= m; j++) if(p[j] !== 0) assignment[p[j] - 1] = j - 1;
+    return assignment;
   }
 
-  function improveStep() {
-    const target = chooseTarget();
-    const before = totalCost();
-    const old = maps[target].slice();
-    maps[target] = solve(costMatrixForImage(target, [0, 1, 2].filter((i) => i !== target)));
-    const after = totalCost();
+  function chooseTargetFromVisited(visitedState){
+    const candidates = visitedState.map((v, i) => v ? null : i).filter(v => v !== null);
+    return candidates[Math.floor(Math.random() * candidates.length)];
+  }
+
+  function improveStep(capture = true){
+    if(visited.every(Boolean)) return false;
+    const target = chooseTargetFromVisited(visited);
+    const before = totalCost(maps, activeWeights);
+    const matrix = costMatrixForImageWithMaps(target, maps, activeWeights);
+    const proposal = cloneMaps(maps);
+    proposal[target] = solveAssignment(matrix);
+    const after = totalCost(proposal, activeWeights);
     uiIterations += 1;
-    if (after < before - 1e-6) {
+    if(after + EPS < before){
+      maps = proposal;
       visited = [false, false, false];
-      acceptedCount += 1;
-      currentCost = after;
-      if (after < bestCost) {
+      accepted += 1;
+      if(after + EPS < bestCost){
         bestCost = after;
         bestMaps = cloneMaps(maps);
+        lastReconScore = reconstructionScore(bestMaps);
+        if(capture) captureSnapshot(`ベスト更新: 画像${target + 1}`, bestCost, bestMaps);
       }
-      captureSnapshot(`採用: 画像${target + 1}`, after, uiIterations);
-      log(`iter ${uiIterations}: img${target + 1} accepted ${formatCost(before)} -> ${formatCost(after)}`);
       return true;
     }
-    maps[target] = old;
     visited[target] = true;
-    rejectedCount += 1;
-    log(`iter ${uiIterations}: img${target + 1} rejected / visited=${visited.map((v) => (v ? 1 : 0)).join('')}`);
+    rejected += 1;
     return false;
   }
 
-  function shake(swaps) {
-    const n = maps[0].length;
-    for (let k = 0; k < swaps; k += 1) {
-      const img = Math.floor(Math.random() * IMAGE_COUNT);
-      const a = Math.floor(Math.random() * n);
-      const b = Math.floor(Math.random() * n);
-      [maps[img][a], maps[img][b]] = [maps[img][b], maps[img][a]];
-    }
-    shakeCount += 1;
-    visited = [false, false, false];
-    currentCost = totalCost();
-    log(`escape ${shakeCount}: ${swaps} swaps / cost ${formatCost(currentCost)}`);
+  function searchRounds(){
+    const grid = Number(gridSelect.value);
+    if(grid <= 6) return 70;
+    if(grid <= 8) return 110;
+    if(grid <= 10) return 170;
+    if(grid <= 12) return 230;
+    if(grid <= 15) return 310;
+    return 220;
   }
 
-  async function runUiSearch() {
-    if (searching) return;
-    if (!views.assigned) {
-      setMessage('先に初期解を作ってください。');
-      return;
-    }
+  async function runUiSearch(){
+    if(!maps) return;
     stopReplay();
-    searching = true;
-    setButtons(false);
-    const rounds = searchRounds();
-    setMessage(`${assignmentMethod}初期解からUIサーチを${rounds}回実行中です。採用された解を遷移として保存します。`);
-    const beforeBest = bestCost;
+    setBusy(true);
+    try{
+      visited = [false, false, false];
+      const maxSteps = searchRounds();
+      let steps = 0;
+      setMessage('UIサーチ本体を局所最適まで実行中です。');
+      while(!visited.every(Boolean) && steps < maxSteps){
+        improveStep(true);
+        steps += 1;
+        if(steps % 3 === 0){
+          rebuildViews();
+          setStats();
+          await delay(10);
+        }
+      }
+      if(visited.every(Boolean)){
+        localOptima += 1;
+        setMessage('局所最適に到達しました。さらに探す場合は「局所脱出して再探索」を押してください。');
+        log(`UIサーチ: ${steps}試行で局所最適 / best ${fmt(bestCost)} / λ=${activeLambda.toFixed(2)}`);
+      }else{
+        setMessage(`上限${maxSteps}試行まで実行しました。続ける場合はもう一度UIサーチを押してください。`);
+        log(`UIサーチ: ${steps}試行で一時停止 / best ${fmt(bestCost)}`);
+      }
+      maps = cloneMaps(bestMaps);
+      currentView = 'recon1';
+      rebuildViews();
+      setStats();
+    }finally{
+      setBusy(false);
+    }
+  }
+
+  function runLocalSearchForMaps(startMaps, weights, maxSteps){
+    let localMaps = cloneMaps(startMaps);
+    let localVisited = [false, false, false];
+    let localBestMaps = cloneMaps(localMaps);
+    let localBestCost = totalCost(localMaps, weights);
+    let steps = 0;
     let localAccepted = 0;
     let localRejected = 0;
-    let escaped = 0;
-    for (let r = 0; r < rounds; r += 1) {
-      const ok = improveStep();
-      if (ok) localAccepted += 1;
-      else localRejected += 1;
-      if (visited.every(Boolean)) {
-        shake(Math.max(2, Math.floor(Math.sqrt(maps[0].length) / 2)));
-        escaped += 1;
-      }
-      if (r % 5 === 0) {
-        setStats();
-        await delay(8);
+    while(!localVisited.every(Boolean) && steps < maxSteps){
+      const target = chooseTargetFromVisited(localVisited);
+      const before = totalCost(localMaps, weights);
+      const matrix = costMatrixForImageWithMaps(target, localMaps, weights);
+      const proposal = cloneMaps(localMaps);
+      proposal[target] = solveAssignment(matrix);
+      const after = totalCost(proposal, weights);
+      steps += 1;
+      if(after + EPS < before){
+        localMaps = proposal;
+        localVisited = [false, false, false];
+        localAccepted += 1;
+        if(after + EPS < localBestCost){
+          localBestCost = after;
+          localBestMaps = cloneMaps(localMaps);
+        }
+      }else{
+        localVisited[target] = true;
+        localRejected += 1;
       }
     }
-    maps = cloneMaps(bestMaps);
-    rebuildViews(false);
-    captureSnapshot('UIサーチ後ベスト', bestCost, uiIterations);
-    currentView = 'recon1';
-    resetPieces(false);
-    render();
-    renderSnapshot(snapshots.length - 1, { fromPlayback: true });
-    const improved = bestCost < beforeBest - 1e-6;
-    if (localAccepted === 0) {
-      setMessage(`UIサーチ${rounds}回: 採用 0 / 棄却 ${localRejected} / 局所脱出 ${escaped}。今回は初期解が強く、改善は見つかりませんでした。`);
-    } else {
-      setMessage(`UIサーチ${rounds}回: 採用 ${localAccepted} / 棄却 ${localRejected} / 局所脱出 ${escaped}。best ${formatCost(beforeBest)} -> ${formatCost(bestCost)} ${improved ? 'に改善。' : 'を維持。'} 遷移スライダーと自動再生で初期解からベスト解まで見られます。`);
-    }
-    setButtons(true);
-    searching = false;
+    return {
+      maps: localMaps,
+      bestMaps: localBestMaps,
+      bestCost: localBestCost,
+      score: reconstructionScore(localBestMaps),
+      steps,
+      accepted: localAccepted,
+      rejected: localRejected,
+      local: localVisited.every(Boolean)
+    };
   }
 
-  function manualShake() {
-    if (!views.assigned) {
-      setMessage('先に合成駒を作ってください。');
-      return;
-    }
+  async function runWeightSearch(){
+    if(!maps) return;
     stopReplay();
-    shake(Math.max(3, Math.floor(Math.sqrt(maps[0].length))));
+    setBusy(true);
+    try{
+      const previousMode = costModeSelect.value;
+      costModeSelect.value = 'colorAuto';
+      const baseMaps = cloneMaps(maps);
+      const maxSteps = Math.max(40, Math.floor(searchRounds() * 0.65));
+      weightRows = [];
+      renderWeightRows();
+      setMessage('色重み λC をヒューリスティック探索中です。');
+      let best = null;
+      for(const lambda of LAMBDA_CANDIDATES){
+        const weights = { y: 1, cb: lambda, cr: lambda };
+        const result = runLocalSearchForMaps(baseMaps, weights, maxSteps);
+        const row = {
+          lambda,
+          score: result.score,
+          cost: result.bestCost,
+          local: result.local,
+          result,
+          best: false
+        };
+        weightRows.push(row);
+        if(!best || row.score < best.score) best = row;
+        log(`λ=${lambda.toFixed(2)} score=${fmt(row.score)} cost=${fmt(row.cost)} ${row.local ? '局所最適' : '途中'}`);
+        renderWeightRows();
+        await delay(20);
+      }
+      for(const row of weightRows) row.best = row === best;
+      activeLambda = best.lambda;
+      activeWeights = { y: 1, cb: activeLambda, cr: activeLambda };
+      maps = cloneMaps(best.result.bestMaps);
+      bestMaps = cloneMaps(best.result.bestMaps);
+      initialCost = totalCost(baseMaps, activeWeights);
+      bestCost = best.result.bestCost;
+      uiIterations = best.result.steps;
+      accepted = best.result.accepted;
+      rejected = best.result.rejected;
+      localOptima = best.result.local ? 1 : 0;
+      visited = best.result.local ? [true, true, true] : [false, false, false];
+      lastReconScore = best.score;
+      snapshots = [];
+      captureSnapshot('重み探索前', initialCost, baseMaps, true);
+      captureSnapshot(`λ=${activeLambda.toFixed(2)} 採用`, bestCost, bestMaps, true);
+      stat.method.textContent = '自動λ + UI';
+      renderWeightRows();
+      currentView = 'recon1';
+      rebuildViews();
+      setStats();
+      setMessage(`λC=${activeLambda.toFixed(2)} を採用しました。必要ならこの重みで本番UIサーチを続けられます。`);
+      log(`色重み探索: λ=${activeLambda.toFixed(2)} 採用 / score ${fmt(best.score)}`);
+      if(previousMode !== 'colorAuto') log(`コストモードを colorAuto に変更`);
+    }finally{
+      setBusy(false);
+    }
+  }
+
+  function buildHungarianInitial(){
+    maps = createBlankMaps();
+    for(let target = 1; target < IMAGE_COUNT; target++){
+      const matrix = costMatrixForImageWithMaps(target, maps, activeWeights);
+      maps[target] = solveAssignment(matrix);
+    }
+    resetSearchState('ハンガリー初期解');
+    setMessage('ハンガリー初期解を作りました。UIサーチか色重み探索に進めます。');
+    log(`ハンガリー初期解: cost ${fmt(initialCost)}`);
+  }
+
+  function buildRandomInitial(){
+    maps = createRandomMaps();
+    resetSearchState('ランダム初期解');
+    setMessage('ランダム初期解を作りました。UIサーチで改善できます。');
+    log(`ランダム初期解: cost ${fmt(initialCost)}`);
+  }
+
+  function shakeMaps(mapSet, swaps = 3){
+    const next = cloneMaps(mapSet);
+    const n = next[0].length;
+    for(let s = 0; s < swaps; s++){
+      const img = 1 + Math.floor(Math.random() * (IMAGE_COUNT - 1));
+      const a = Math.floor(Math.random() * n);
+      const b = Math.floor(Math.random() * n);
+      [next[img][a], next[img][b]] = [next[img][b], next[img][a]];
+    }
+    return next;
+  }
+
+  async function escapeAndSearch(){
+    if(!bestMaps) return;
+    const grid = Number(gridSelect.value);
+    const swaps = grid <= 8 ? 2 : 3;
+    maps = shakeMaps(bestMaps, swaps);
+    visited = [false, false, false];
+    shakeCount += 1;
+    setMessage('局所最適から少し崩しました。再探索します。');
+    log(`局所脱出: ${swaps} swap`);
     rebuildViews();
-    resetPieces(false);
-    render();
-    setMessage('割り当てを少し崩しました。UIサーチ実行で改善を試せます。');
+    setStats();
+    await runUiSearch();
   }
 
-  function restoreBest() {
-    if (!bestMaps[0].length) return;
+  function restoreBest(){
+    if(!bestMaps) return;
     stopReplay();
     maps = cloneMaps(bestMaps);
-    rebuildViews(false);
-    resetPieces(false);
     currentView = 'recon1';
-    render();
+    puzzleOrder = null;
+    rebuildViews();
+    setStats();
     setMessage('ベスト解に戻しました。');
   }
 
-  function setStats() {
+  function makePuzzle(){
+    if(!views.assigned) return;
     const grid = Number(gridSelect.value);
-    gridStat.textContent = `${grid}×${grid}`;
-    pieceStat.textContent = String(grid * grid);
-    methodStat.textContent = assignmentMethod;
-    uiStat.textContent = String(uiIterations);
-    costStat.textContent = formatCost(currentCost);
-    bestCostStat.textContent = formatCost(bestCost);
-    initialCostStat.textContent = formatCost(initialCost);
-    acceptedStat.textContent = String(acceptedCount);
-    rejectedStat.textContent = String(rejectedCount);
-    shakeStat.textContent = String(shakeCount);
-    visitedStat.textContent = visited.map((v) => (v ? 1 : 0)).join('');
-    if (initialCost && bestCost !== null) {
-      const percent = ((initialCost - bestCost) / initialCost) * 100;
-      improveStat.textContent = `${Math.max(0, percent).toFixed(2)}%`;
-    } else {
-      improveStat.textContent = '-';
-    }
-  }
-
-  function dataForView() {
-    return views[currentView] || views.assigned || null;
-  }
-
-  function copyCellFromImageData(source, target, sourceIndex, displayIndex, grid) {
-    const cell = SIZE / grid;
-    const sx = (sourceIndex % grid) * cell;
-    const sy = Math.floor(sourceIndex / grid) * cell;
-    const dx = (displayIndex % grid) * cell;
-    const dy = Math.floor(displayIndex / grid) * cell;
-    for (let y = 0; y < cell; y += 1) {
-      for (let x = 0; x < cell; x += 1) {
-        const src = ((sy + y) * SIZE + (sx + x)) * 4;
-        const dst = ((dy + y) * SIZE + (dx + x)) * 4;
-        target.data[dst] = source.data[src];
-        target.data[dst + 1] = source.data[src + 1];
-        target.data[dst + 2] = source.data[src + 2];
-        target.data[dst + 3] = source.data[src + 3];
-      }
-    }
-  }
-
-  function drawGrid(grid) {
-    const cell = SIZE / grid;
-    ctx.strokeStyle = 'rgba(255,255,255,.55)';
-    ctx.lineWidth = 1.2;
-    for (let i = 0; i <= grid; i += 1) {
-      ctx.beginPath();
-      ctx.moveTo(i * cell, 0);
-      ctx.lineTo(i * cell, SIZE);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(0, i * cell);
-      ctx.lineTo(SIZE, i * cell);
-      ctx.stroke();
-    }
-  }
-
-  function drawBlankCell(displayIndex, grid) {
-    const cell = SIZE / grid;
-    const x = (displayIndex % grid) * cell;
-    const y = Math.floor(displayIndex / grid) * cell;
-    ctx.fillStyle = '#101522';
-    ctx.fillRect(x, y, cell, cell);
-    if (cell >= 34) {
-      ctx.fillStyle = '#d8e4ff';
-      ctx.font = `${Math.max(10, cell * 0.17)}px sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.fillText('空白', x + cell / 2, y + cell / 2 + 4);
-    }
-  }
-
-  function draw(data) {
-    const grid = Number(gridSelect.value);
-    if (!data) {
-      ctx.clearRect(0, 0, SIZE, SIZE);
-      ctx.fillStyle = '#eef2ff';
-      ctx.fillRect(0, 0, SIZE, SIZE);
-      ctx.fillStyle = '#172033';
-      ctx.font = 'bold 28px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('読み込み中...', SIZE / 2, SIZE / 2);
-      drawGrid(grid);
-      return;
-    }
-
-    if (blankIndex === null || !pieces.length) {
-      ctx.putImageData(data, 0, 0);
-      drawGrid(grid);
-      return;
-    }
-
-    const out = ctx.createImageData(SIZE, SIZE);
-    for (let displayIndex = 0; displayIndex < pieces.length; displayIndex += 1) {
-      const sourceIndex = pieces[displayIndex];
-      if (sourceIndex !== null) copyCellFromImageData(data, out, sourceIndex, displayIndex, grid);
-    }
-    ctx.putImageData(out, 0, 0);
-    drawBlankCell(blankIndex, grid);
-    drawGrid(grid);
-  }
-
-  function resetPieces(shouldRender = true) {
-    const n = Number(gridSelect.value);
-    pieces = id(n * n);
-    blankIndex = null;
-    moves = 0;
-    if (shouldRender) render();
-  }
-
-  function makeTabs() {
-    tabs.innerHTML = '';
-    [
-      ['assigned', '探索スロット順'],
-      ['naive', '同位置合成駒'],
-      ['recon1', '再構築1'],
-      ['recon2', '再構築2'],
-      ['recon3', '再構築3'],
-      ['source1', '元画像1'],
-      ['source2', '元画像2'],
-      ['source3', '元画像3']
-    ].forEach(([view, label]) => {
-      const tab = document.createElement('button');
-      tab.type = 'button';
-      tab.className = 'tab';
-      tab.dataset.view = view;
-      tab.textContent = label;
-      tab.addEventListener('click', () => {
-        stopReplay();
-        currentView = view;
-        render();
-      });
-      tabs.appendChild(tab);
-    });
-  }
-
-  function render() {
-    setStats();
-    draw(dataForView());
-    [...tabs.children].forEach((tab) => tab.classList.toggle('active', tab.dataset.view === currentView));
-  }
-
-  function build(mode = 'hungarian', text) {
-    if (images.some((img) => !img)) {
-      setMessage('3枚すべての画像を読み込んでください。');
-      return;
-    }
-    stopReplay();
-    setMessage(`${mode === 'random' ? 'ランダム' : 'ハンガリー'}初期解を計算中です。`);
-    setTimeout(() => {
-      initialAssignment(mode);
-      currentView = 'assigned';
-      resetPieces(false);
-      makeTabs();
-      render();
-      setMessage(text || (mode === 'random'
-        ? 'ランダム初期解を作りました。UIサーチ実行で改善遷移が見えやすいです。'
-        : `${assignmentMethod}で初期割り当てを計算しました。改善0回なら、すでに強い初期解の可能性があります。`));
-    }, 20);
-  }
-
-  function slideToBlank(index, countMove = true) {
-    if (blankIndex === null || index === blankIndex) return false;
-    const n = Number(gridSelect.value);
-    const bx = blankIndex % n;
-    const by = Math.floor(blankIndex / n);
-    const x = index % n;
-    const y = Math.floor(index / n);
-    if (x !== bx && y !== by) return false;
-    if (x === bx) {
-      const dir = y < by ? -1 : 1;
-      for (let row = by; row !== y; row -= dir) pieces[row * n + x] = pieces[(row - dir) * n + x];
-    } else {
-      const dir = x < bx ? -1 : 1;
-      for (let col = bx; col !== x; col -= dir) pieces[y * n + col] = pieces[y * n + col - dir];
-    }
-    pieces[index] = null;
-    blankIndex = index;
-    if (countMove) moves += 1;
-    return true;
-  }
-
-  function shufflePuzzle() {
-    if (!views.assigned) {
-      setMessage('先に合成駒を作ってください。');
-      return;
-    }
-    stopReplay();
-    const n = Number(gridSelect.value);
-    pieces = id(n * n);
-    blankIndex = n * n - 1;
-    pieces[blankIndex] = null;
-    for (let s = 0; s < n * n * 12; s += 1) {
-      const candidates = [];
-      const bx = blankIndex % n;
-      const by = Math.floor(blankIndex / n);
-      for (let i = 0; i < pieces.length; i += 1) {
-        if (i === blankIndex) continue;
-        const x = i % n;
-        const y = Math.floor(i / n);
-        if (x === bx || y === by) candidates.push(i);
-      }
-      slideToBlank(candidates[Math.floor(Math.random() * candidates.length)], false);
-    }
-    moves = 0;
+    const n = grid * grid;
+    puzzleOrder = shuffleArray(id(n));
+    puzzleOrder[n - 1] = -1;
+    currentView = 'assigned';
+    makeTabs();
     render();
-    setMessage('スライドパズル化しました。');
+    setMessage('探索スロット順の画像をスライドパズル風に崩しました。');
   }
 
-  function solvePuzzle() {
-    if (!views.assigned) return;
-    stopReplay();
-    resetPieces();
+  function solvePuzzle(){
+    puzzleOrder = null;
+    currentView = 'assigned';
+    makeTabs();
+    render();
     setMessage('元の配置に戻しました。');
   }
 
-  canvas.addEventListener('click', (event) => {
-    if (blankIndex === null) return;
-    const rect = canvas.getBoundingClientRect();
-    const n = Number(gridSelect.value);
-    const x = Math.floor(((event.clientX - rect.left) / rect.width) * n);
-    const y = Math.floor(((event.clientY - rect.top) / rect.height) * n);
-    if (slideToBlank(y * n + x)) render();
-  });
+  function onGridChange(){
+    if(!sourceData.length) return;
+    stopReplay();
+    splitAllImages();
+    maps = createBlankMaps();
+    resetSearchState('分割変更');
+    weightRows = [];
+    renderWeightRows();
+    setMessage('分割数を変更しました。初期解を作り直してください。');
+    log(`分割数変更: ${Number(gridSelect.value)}×${Number(gridSelect.value)}`);
+  }
 
-  fileInputs.forEach((input, index) => {
-    input.addEventListener('change', () => {
-      const file = input.files && input.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        const img = new Image();
-        img.onload = () => {
-          images[index] = img;
-          build('hungarian', `画像${index + 1}を差し替え、ハンガリー初期解を再計算しました。`);
-        };
-        img.src = reader.result;
-      };
-      reader.readAsDataURL(file);
+  function setupEvents(){
+    buttons.template.addEventListener('click', generateTemplates);
+    buttons.random.addEventListener('click', buildRandomInitial);
+    buttons.build.addEventListener('click', buildHungarianInitial);
+    buttons.weight.addEventListener('click', runWeightSearch);
+    buttons.ui.addEventListener('click', runUiSearch);
+    buttons.shake.addEventListener('click', escapeAndSearch);
+    buttons.best.addEventListener('click', restoreBest);
+    buttons.shuffle.addEventListener('click', makePuzzle);
+    buttons.solve.addEventListener('click', solvePuzzle);
+    buttons.replay.addEventListener('click', autoReplay);
+    buttons.stopReplay.addEventListener('click', stopReplay);
+    replaySlider.addEventListener('input', () => renderSnapshot(Number(replaySlider.value)));
+    gridSelect.addEventListener('change', onGridChange);
+    costModeSelect.addEventListener('change', () => {
+      updateWeightsFromMode();
+      log(`コストモード変更: ${costModeSelect.value} / λ=${activeLambda.toFixed(2)}`);
     });
-  });
+    for(let i = 0; i < IMAGE_COUNT; i++){
+      document.getElementById(`file${i}`).addEventListener('change', event => {
+        const file = event.target.files && event.target.files[0];
+        if(file) loadFileIntoImage(i, file).catch(error => {
+          console.error(error);
+          setMessage('画像の読み込みに失敗しました。');
+        });
+      });
+    }
+  }
 
-  document.getElementById('templateButton').addEventListener('click', loadTemplates);
-  document.getElementById('randomButton').addEventListener('click', () => build('random'));
-  document.getElementById('buildButton').addEventListener('click', () => build('hungarian'));
-  document.getElementById('uiSearchButton').addEventListener('click', runUiSearch);
-  document.getElementById('shakeButton').addEventListener('click', manualShake);
-  document.getElementById('bestButton').addEventListener('click', restoreBest);
-  document.getElementById('shuffleButton').addEventListener('click', shufflePuzzle);
-  document.getElementById('solveButton').addEventListener('click', solvePuzzle);
-  replayButton.addEventListener('click', autoReplay);
-  stopReplayButton.addEventListener('click', stopReplay);
-  replaySlider.addEventListener('input', (event) => renderSnapshot(event.target.value));
-  gridSelect.addEventListener('change', () => build('hungarian', '分割数を変更し、ハンガリー初期解を再計算しました。'));
-
-  resetPieces(false);
+  setupEvents();
   makeTabs();
-  render();
-  loadTemplates();
+  generateTemplates();
 })();
 </script>
 </body>
