@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>研究デモ入口</title>
+<style>
+body{margin:0;background:#f6f8fb;color:#172033;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Yu Gothic",Meiryo,sans-serif;line-height:1.75}main{width:min(980px,calc(100% - 28px));margin:auto;padding:24px 0 56px}.nav,.card{background:white;border:1px solid #dce3ec;border-radius:24px;box-shadow:0 18px 44px rgba(23,32,51,.10)}.nav{display:flex;justify-content:space-between;gap:12px;margin-bottom:18px;padding:12px 16px}.nav a{font-weight:900;color:#172033;text-decoration:none}.card{padding:24px;margin:18px 0}h1{font-size:clamp(32px,6vw,58px);line-height:1.1;letter-spacing:-.05em;margin:8px 0 14px}p{color:#627083}.badge{display:inline-flex;background:#eef2ff;color:#3443b6;border-radius:999px;padding:4px 9px;font-size:12px;font-weight:900;margin:2px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.item{display:block;padding:18px;border:1px solid #dce3ec;border-radius:18px;background:#fbfcff;text-decoration:none;color:#172033}.item b{display:block;font-size:20px}.item span{display:block;color:#627083;margin-top:6px}.note{border:1px solid #b7e1dc;background:#ecfbf9;color:#12615d;border-radius:16px;padding:13px 15px;font-weight:850}@media(max-width:760px){main{width:calc(100% - 18px)}.nav{flex-direction:column}.grid{grid-template-columns:1fr}.card{padding:18px}}
+</style>
+</head>
+<body>
+<main>
+<nav class="nav"><a href="./">研究パズル Web デモ</a><div><a href="./research.html">研究紹介</a> / <a href="./progress.html">進捗日記</a></div></nav>
+<section class="card">
+<span class="badge">Demo Map</span><span class="badge">UI Search</span><span class="badge">B_color</span>
+<h1>研究デモ入口</h1>
+<p>既存デモ、B_color / J評価入り候補、検証ページ、説明ページをまとめた入口です。トップページを壊さずに、研究の各段階を辿れるようにします。</p>
+<div class="note">今後はここを研究Webのハブとして使い、安定したページから順にトップへ昇格させます。</div>
+</section>
+<section class="card">
+<h2>動くデモ</h2>
+<div class="grid">
+<a class="item" href="./index.html"><b>既存メインデモ</b><span>UIサーチ、色重み探索、再構築表示を含む現在のトップ。</span></a>
+<a class="item" href="./main-bcolor-demo.html"><b>B_color / J評価候補</b><span>Lab ΔEベースのB_colorと、正則化付きJ評価でλCを選ぶ候補版。</span></a>
+<a class="item" href="./bcolor-cell-demo.html"><b>実画像セルB_color検証</b><span>アップロード画像をセル分割し、Lab平均との差でB_colorを測る検証ページ。</span></a>
+<a class="item" href="./regularized-weight-demo.html"><b>J評価ミニデモ</b><span>P、B、色寄与率、λ正則化をまとめた目的関数の挙動を見るミニデモ。</span></a>
+</div>
+</section>
+<section class="card">
+<h2>説明・記録</h2>
+<div class="grid">
+<a class="item" href="./weight-search.html"><b>色重み探索の説明</b><span>λCを制約・正則化付きで扱う方針と交互最適化の説明。</span></a>
+<a class="item" href="./main-bcolor-integration.html"><b>B_color統合仕様</b><span>メインデモへB_colorを差し込む関数・表示項目・実装順。</span></a>
+<a class="item" href="./literature.html"><b>参考文献メモ</b><span>CIEDE2000、SSIM、GMSD、ΔE_NS、LPIPSなどの使い所。</span></a>
+<a class="item" href="./progress.html"><b>進捗日記</b><span>PRごとの実装・方針転換・注意点の記録。</span></a>
+</div>
+</section>
+</main>
+</body>
+</html>
