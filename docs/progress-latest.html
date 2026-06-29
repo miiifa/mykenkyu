@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>最新進捗メモ</title>
+<style>
+body{margin:0;background:#f6f8fb;color:#172033;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Yu Gothic",Meiryo,sans-serif;line-height:1.75}main{width:min(940px,calc(100% - 28px));margin:auto;padding:24px 0 56px}.nav,.card{background:white;border:1px solid #dce3ec;border-radius:24px;box-shadow:0 18px 44px rgba(23,32,51,.10)}.nav{display:flex;justify-content:space-between;gap:12px;margin-bottom:18px;padding:12px 16px}.nav a{font-weight:900;color:#172033;text-decoration:none}.card{padding:24px;margin:18px 0}h1{font-size:clamp(32px,6vw,58px);line-height:1.1;letter-spacing:-.05em;margin:8px 0 14px}p{color:#627083}.badge{display:inline-flex;background:#eef2ff;color:#3443b6;border-radius:999px;padding:4px 9px;font-size:12px;font-weight:900;margin:2px}.note{border:1px solid #b7e1dc;background:#ecfbf9;color:#12615d;border-radius:16px;padding:13px 15px;font-weight:850}.item{padding:18px;border:1px solid #dce3ec;border-radius:18px;background:#fbfcff;margin:12px 0}.item b{display:block;font-size:20px}table{width:100%;border-collapse:collapse;background:white;border:1px solid #dce3ec;border-radius:18px;overflow:hidden}th,td{border-bottom:1px solid #dce3ec;padding:10px;text-align:left;vertical-align:top}th{background:#f2f5fb}@media(max-width:760px){main{width:calc(100% - 18px)}.nav{flex-direction:column}.card{padding:18px}}
+</style>
+</head>
+<body>
+<main>
+<nav class="nav"><a href="./demo-map.html">研究デモ入口</a><div><a href="./progress.html">進捗日記</a> / <a href="./main-bcolor-demo.html">B_color候補</a></div></nav>
+<section class="card">
+<span class="badge">Latest Progress</span><span class="badge">B_color</span><span class="badge">Demo Map</span>
+<h1>最新進捗メモ</h1>
+<p>大きな進捗日記とは別に、直近の追加分だけを軽く追えるメモです。</p>
+<div class="note">現在は、既存トップを壊さずに B_color / J評価入り候補ページを育て、安定してからトップへ昇格する方針です。</div>
+</section>
+<section class="card">
+<h2>直近の流れ</h2>
+<div class="item"><b>PR #21: B_color / J評価入りメインデモ候補</b><p>既存の index.html を直接壊さず、main-bcolor-demo.html と main-bcolor-demo.js を追加。実画像セルから Lab ΔE ベースの B_color を計算し、P・B_color・色寄与率ペナルティ・λ正則化をまとめた J で λC を選ぶ候補版を作った。</p></div>
+<div class="item"><b>PR #22: デモ入口ページ</b><p>demo-map.html を追加。既存メインデモ、B_color / J評価候補、実画像セルB_color検証、J評価ミニデモ、説明ページ、参考文献、進捗日記への導線をまとめた。</p></div>
+</section>
+<section class="card">
+<h2>今の判断</h2>
+<table>
+<thead><tr><th>判断</th><th>理由</th></tr></thead>
+<tbody>
+<tr><td>index.html をすぐ置き換えない</td><td>既存トップは大きく、直接更新で壊すリスクが高い。候補ページで動作確認してから昇格する。</td></tr>
+<tr><td>B_color / J評価候補を育てる</td><td>Lab ΔE ベースの色知覚コストを目的関数に入れられるようになったため、次は安定性と見た目を確認する。</td></tr>
+<tr><td>入口ページをハブにする</td><td>研究ページが増えてきたため、demo-map.html から全体を辿れるようにした。</td></tr>
+</tbody>
+</table>
+</section>
+<section class="card">
+<h2>次にやること</h2>
+<ul>
+<li>main-bcolor-demo.html の挙動を確認する。</li>
+<li>J評価候補のUIサーチが安定して改善するかを見る。</li>
+<li>問題がなければ demo-map.html からさらに目立つ導線を作る。</li>
+<li>その後、index.html への昇格またはトップからの明示リンク追加を行う。</li>
+</ul>
+</section>
+</main>
+</body>
+</html>
